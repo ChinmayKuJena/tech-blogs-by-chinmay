@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Designing a Self-Optimizing Event-Sourced Service Mesh with PostgreSQL Logical Replication, NestJS, and LLM-Driven Routing</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-02-16
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    Explores how to build an event-sourced microservice mesh using PostgreSQL logical replication, NestJS, and large-language-model-driven request routing, covering architecture, data consistency, AI integration, and production trade-offs.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">backend-architecture</span>
+    <span class="tag">event-sourcing</span>
+    <span class="tag">postgresql</span>
+    <span class="tag">nestjs</span>
+    <span class="tag">llm-integration</span>
+    <span class="tag">service-mesh</span>
+    <span class="tag">distributed-systems</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>In modern cloud‑native environments, microservices must handle high‑velocity data while preserving auditability and enabling rapid feature iteration. Event sourcing provides an immutable log of state changes, but scaling that log across service boundaries introduces consistency and latency challenges. By combining PostgreSQL logical replication with NestJS CQRS modules, we obtain a reliable, strongly typed event store that can be streamed to any number of consumers. Adding a large‑language‑model (LLM) router layer creates a self‑optimizing request dispatcher that selects the most appropriate service instance based on intent, load, and data locality.</p>
+<p>The resulting mesh behaves like a distributed state machine: each service publishes domain events to a central PostgreSQL instance, replication slots fan‑out those events to downstream subscribers, and the LLM router dynamically rewrites incoming API calls into the optimal event‑driven workflow. This article walks through the full stack—from schema evolution and NestJS module composition to LLM inference integration, CI/CD pipelines, and performance engineering.</p>
+<h2 id="corearchitecturalpattern">Core Architectural Pattern</h2>
+<p>The architecture consists of three tightly coupled layers:</p>
+<ol>
+<li><strong>PostgreSQL Logical Replication</strong> – A primary database holds the canonical event table. Replication slots expose a change‑data‑capture (CDC) stream that downstream services consume in near real‑time.</li>
+<li><strong>NestJS CQRS Microservices</strong> – Each service implements Command, Query, and Event handlers using the NestJS <code>@nestjs/cqrs</code> package. Events are persisted to PostgreSQL and simultaneously emitted to the replication stream.</li>
+<li><strong>LLM‑Driven Router</strong> – A lightweight HTTP gateway runs an LLM inference engine (e.g., Ollama, OpenAI) to classify incoming requests and forward them to the appropriate NestJS endpoint. The router also selects the optimal LLM model based on request complexity and current load.</li>
+</ol>
+<p>+----------------+      +-------------------+      +-------------------+<br />
+|   Client API   | ---&gt; |   LLM Router      | ---&gt; |   Service A (Nest) |<br />
++----------------+      +-------------------+      +-------------------+<br />
+                               |<br />
+                               v<br />
+                        +-------------------+<br />
+                        |   Service B (Nest) |<br />
+                        +-------------------+</p>
+<p>The router does not store state; it merely enriches the request with routing metadata before delegating to the target service. All state transitions are captured as events in PostgreSQL, guaranteeing a single source of truth.</p>
+<h2 id="schemaevolutionandversioning">Schema Evolution and Versioning</h2>
+<p>Event schemas evolve as business requirements change. To avoid breaking downstream consumers, we adopt a <strong>dual‑version strategy</strong>:</p>
+<ul>
+<li><strong>Versioned Event Types</strong> – Each event payload includes a <code>type</code> and <code>version</code> field (e.g., <code>UserCreatedV2</code>). Handlers subscribe to specific versions and optionally transform older versions to the latest shape.</li>
+<li><strong>Coordinated Migration Jobs</strong> – A dedicated NestJS migration service reads historic events, applies a transformation function, and writes the upgraded events to a new table (<code>events_v2</code>). Replication slots are switched atomically after verification.</li>
+</ul>
+<p>typescript<br />
+export interface DomainEvent {<br />
+    id: string;<br />
+    aggregateId: string;<br />
+    type: string; // e.g., "UserCreated"<br />
+    version: number;<br />
+    payload: Record<string, any>;<br />
+    timestamp: Date;<br />
+}</p>
+<p>By keeping both versions alive during rollout, we guarantee <strong>backward compatibility</strong> while allowing progressive adoption of new schemas.</p>
+<h2 id="nestjsmodulecomposition">NestJS Module Composition</h2>
+<p>Each microservice is built as a NestJS module that bundles CQRS components, a PostgreSQL repository, and a replication subscriber. The typical module layout:</p>
+<p>src/<br />
+  ├─ app.module.ts<br />
+  ├─ commands/<br />
+  │    └─ create-user.command.ts<br />
+  ├─ events/<br />
+  │    ├─ user-created.event.ts<br />
+  │    └─ user-updated.event.ts<br />
+  ├─ handlers/<br />
+  │    ├─ create-user.handler.ts<br />
+  │    └─ user-created.handler.ts<br />
+  ├─ repositories/<br />
+  │    └─ event.repository.ts<br />
+  └─ replication/<br />
+       └─ pg-replication.service.ts</p>
+<p>The replication service uses the <code>pg-logical-replication</code> npm package (modern) or <code>pg-output</code> (legacy) depending on the target PostgreSQL version. It creates a replication slot, parses <code>INSERT</code> messages, and dispatches them to the appropriate event handlers.</p>
+<p>typescript<br />
+@Injectable()<br />
+export class PgReplicationService implements OnModuleInit {<br />
+  async onModuleInit() {<br />
+    const slot = await this.replication.createSlot('event_slot');<br />
+    this.replication.subscribe(slot, async (msg) =&gt; {<br />
+      const event = JSON.parse(msg.payload);<br />
+      await this.eventBus.publish(event);<br />
+    });<br />
+  }<br />
+}</p>
+<p>The <code>EventBus</code> from <code>@nestjs/cqrs</code> guarantees ordered delivery within a single service instance.</p>
+<h2 id="llminferenceintegration">LLM Inference Integration</h2>
+<p>The router layer runs a minimal Express server that forwards raw HTTP bodies to an LLM endpoint. The LLM returns a JSON routing decision:</p>
+<p>{ "targetService": "user-service", "command": "CreateUser", "model": "gpt-4o-mini" }</p>
+<p>The router then translates the decision into a NestJS HTTP request (or gRPC call) and attaches a correlation ID for tracing.</p>
+<p>typescript<br />
+app.post('/api', async (req, res) =&gt; {<br />
+  const prompt = buildPrompt(req.body);<br />
+  const decision = await llmClient.infer(prompt);<br />
+  const { targetService, command, model } = decision;</p>
+<p>// Dynamic model selection based on payload size<br />
+  if (req.body.largePayload) {<br />
+    await llmClient.switchModel('gpt-4o');<br />
+  }</p>
+<p>const response = await httpClient.post(<code>http://${targetService}/commands/${command}</code>, req.body);<br />
+  res.json(response.data);<br />
+});</p>
+<p>Model selection is cached per request type to reduce latency. The router also implements <strong>back‑pressure</strong>: if a downstream service reports high load, the router temporarily routes to a fallback model with lower compute cost.</p>
+<h2 id="cicdorchestration">CI/CD Orchestration</h2>
+<p>A typical pipeline (GitHub Actions) includes the following jobs:</p>
+<ol>
+<li><strong>Lint & Unit Tests</strong> – Run <code>npm run lint</code> and Jest tests for each microservice.</li>
+<li><strong>Schema Validation</strong> – Execute a custom script that loads the latest event schemas and verifies compatibility with existing migration scripts.</li>
+<li><strong>Docker Build</strong> – Build multi‑stage Docker images for each service and the router.</li>
+<li><strong>Integration Tests</strong> – Spin up a PostgreSQL container with logical replication enabled, deploy services, and run end‑to‑end scenarios that include LLM routing.</li>
+<li><strong>Canary Deploy</strong> – Deploy the new version to a subset of pods, monitor replication lag and LLM latency, then promote to full rollout.</li>
+</ol>
+<p>Artifacts such as generated TypeScript types for events are published to a private npm registry, ensuring all services consume a single source of truth.</p>
+<h2 id="performanceandscalingconsiderations">Performance and Scaling Considerations</h2>
+<h3 id="replicationlagmitigation">Replication Lag Mitigation</h3>
+<ul>
+<li><strong>Slot Buffer Size</strong> – Tune <code>wal_sender_timeout</code> and <code>max_replication_slots</code> to accommodate bursty writes.</li>
+<li><strong>Parallel Consumers</strong> – Deploy multiple replication workers per service; each worker processes a distinct logical shard based on aggregate ID hash.</li>
+</ul>
+<h3 id="backpressurehandling">Back‑Pressure Handling</h3>
+<ul>
+<li><strong>Circuit Breaker</strong> – Wrap outbound HTTP calls with a circuit‑breaker that trips when latency exceeds a threshold, causing the router to fallback to a cached response or a simpler LLM model.</li>
+<li><strong>Queueing</strong> – Use a lightweight in‑memory queue (e.g., <code>bullmq</code>) to buffer events when downstream processing falls behind.</li>
+</ul>
+<h3 id="adaptivequeryplanning">Adaptive Query Planning</h3>
+<ul>
+<li><strong>Read‑Replica Routing</strong> – Direct read‑only queries (e.g., projections) to PostgreSQL read replicas while writes continue on the primary.</li>
+<li><strong>Materialized Views</strong> – Pre‑compute common projection queries and refresh them asynchronously to reduce load on the event table.</li>
+</ul>
+<h3 id="cachinglayers">Caching Layers</h3>
+<ul>
+<li><strong>Redis Cache</strong> – Store the result of LLM routing decisions for identical payload signatures for up to 30 seconds.</li>
+<li><strong>Edge Cache</strong> – Deploy a CDN for static assets and idempotent GET endpoints.</li>
+</ul>
+<h3 id="dynamicllmmodelselection">Dynamic LLM Model Selection</h3>
+<ul>
+<li><strong>Cost‑Aware Scheduler</strong> – Assign cheaper models to low‑risk requests and reserve larger models for high‑value transactions.</li>
+<li><strong>Model Warm‑Up</strong> – Keep a small pool of warm containers for the most frequently used models to avoid cold‑start latency.</li>
+</ul>
+<h2 id="commonpitfalls">Common Pitfalls</h2>
+<ul>
+<li><strong>Assuming Eventual Consistency Is Sufficient</strong> – Relying solely on eventual consistency can cause race conditions when multiple services react to the same event. Implement compensating transactions or idempotent handlers to reconcile divergent states.</li>
+<li><strong>Neglecting Coordinated Schema Versioning</strong> – Deploying a new event version without synchronizing replication slots can lead to missing fields or deserialization errors. Use a version lockstep across all services during a migration window.</li>
+<li><strong>Over‑Provisioning LLM Calls</strong> – Invoking the LLM for every request dramatically increases latency and cost. Cache routing decisions and fall back to rule‑based routing when confidence scores are low.</li>
+<li><strong>Ignoring Replication Slot Saturation</strong> – Unlimited slot creation can exhaust PostgreSQL resources. Monitor <code>pg_replication_slots</code> and enforce a quota per environment.</li>
+</ul>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>Fuse PostgreSQL logical replication with NestJS CQRS to obtain a durable, streamable event store.</li>
+<li>Employ versioned event schemas and coordinated migration jobs to evolve the data model safely.</li>
+<li>Introduce an LLM router that classifies requests, selects optimal services, and dynamically chooses inference models.</li>
+<li>Mitigate replication lag and back‑pressure through parallel consumers, circuit breakers, and caching.</li>
+<li>Treat eventual consistency as a baseline; supplement it with compensating actions and strict schema coordination.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
