@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Designing a Real-Time Recommendation Service with Event-Driven NestJS, PostgreSQL Logical Replication, and LLM-Powered Feature Enrichment</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-02-17
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    An in-depth guide on building a low-latency recommendation engine that combines NestJS event streams, PostgreSQL logical replication for near‑real‑time analytics, and large language model inference for dynamic feature generation.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">backend-architecture</span>
+    <span class="tag">postgresql</span>
+    <span class="tag">nestjs</span>
+    <span class="tag">ai-integration</span>
+    <span class="tag">event-driven</span>
+    <span class="tag">scalability</span>
+    <span class="tag">distributed-systems</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>Real‑time personalization demands that fresh user signals flow through the system faster than a human can notice a change. By coupling an event‑driven NestJS microservice layer with PostgreSQL logical replication, the service can ingest every click, view, or purchase as a change event. A sidecar process runs a large language model (LLM) to enrich these events with semantic features – for example, extracting product intent from free‑form search queries – without blocking the request path.</p>
+<p>The architecture described here isolates latency‑critical recommendation queries from heavyweight AI inference. The recommendation microservice reads from a materialized view that is refreshed by a near‑real‑time replication stream, while the LLM sidecar writes enriched attributes back to a separate table. This separation preserves strict service‑level objectives (SLOs) and enables independent scaling of the AI workload.</p>
+<h2 id="eventdrivenrecommendationpipeline">Event‑Driven Recommendation Pipeline</h2>
+<p>The pipeline consists of three logical stages:</p>
+<ol>
+<li><strong>Change Data Capture (CDC)</strong> – PostgreSQL publishes row‑level changes via logical replication.</li>
+<li><strong>Event Bus</strong> – NestJS subscribes to the replication stream, transforms rows into domain events, and forwards them to a Kafka topic.</li>
+<li><strong>Feature Enrichment</strong> – An LLM sidecar consumes the topic, generates additional features, and writes them to a feature store table.</li>
+</ol>
+<p>The recommendation engine queries the feature store through a read‑only replica, guaranteeing sub‑millisecond response times.</p>
+<h2 id="settinguppostgresqllogicalreplication">Setting Up PostgreSQL Logical Replication</h2>
+<p>Create a publication that includes the tables feeding the recommendation engine. The following SQL creates a publication for the <code>user_actions</code> table and a replication slot for the NestJS consumer.</p>
+<pre><code>CREATE PUBLICATION recommendation_pub FOR TABLE user_actions;
+SELECT * FROM pg_create_logical_replication_slot('nestjs_slot', 'pgoutput');
+</code></pre>
+<p>Configure <code>postgresql.conf</code> to enable logical decoding:</p>
+<pre><code>wal_level = logical
+max_replication_slots = 5
+max_wal_senders = 5
+</code></pre>
+<p>Restart the server after editing the configuration.</p>
+<h2 id="nestjsmicroserviceforcdc">NestJS Microservice for CDC</h2>
+<p>Install the required packages:</p>
+<pre><code>npm install @nestjs/microservices pg pg-logical-replication
+</code></pre>
+<p>A minimal CDC service can be implemented as follows:</p>
+<pre><code>import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { LogicalReplication, LogicalReplicationConfig } from 'pg-logical-replication';
+import { Client } from 'pg';
+
+@Injectable()
+export class CdcService implements OnModuleInit, OnModuleDestroy {
+  private client: Client;
+  private replication: LogicalReplication;
+
+  async onModuleInit() {
+    const config: LogicalReplicationConfig = {
+      connectionString: process.env.PG_CONNECTION,
+      slotName: 'nestjs_slot',
+      plugin: 'pgoutput',
+      publicationNames: ['recommendation_pub'],
+    };
+    this.client = new Client({ connectionString: process.env.PG_CONNECTION });
+    await this.client.connect();
+    this.replication = new LogicalReplication(this.client);
+    const stream = await this.replication.start(config);
+    stream.on('data', this.handleChange.bind(this));
+  }
+
+  async handleChange(msg: any) {
+    const payload = JSON.parse(msg.payload);
+    // Transform to domain event and publish to Kafka
+    // Example: this.kafkaProducer.send({ topic: 'user-actions', messages: [{ value: JSON.stringify(payload) }] });
+  }
+
+  async onModuleDestroy() {
+    await this.replication.stop();
+    await this.client.end();
+  }
+}
+</code></pre>
+<p>The service emits events to a Kafka broker (or any compatible event bus). The <code>handleChange</code> method can be extended to perform schema version checks before processing.</p>
+<h2 id="llmsidecarforfeatureenrichment">LLM Sidecar for Feature Enrichment</h2>
+<p>The sidecar runs independently and consumes the <code>user-actions</code> topic. It uses the <code>@xenova/transformers</code> package for on‑device inference, avoiding network latency to external APIs.</p>
+<pre><code>npm install @xenova/transformers kafkajs
+</code></pre>
+<p>A simplified consumer looks like this:</p>
+<pre><code>import { Kafka } from 'kafkajs';
+import { pipeline } from '@xenova/transformers';
+import { Client } from 'pg';
+
+const kafka = new Kafka({ brokers: [process.env.KAFKA_BROKER] });
+const consumer = kafka.consumer({ groupId: 'llm-enricher' });
+const pgClient = new Client({ connectionString: process.env.PG_CONNECTION });
+
+async function start() {
+  await pgClient.connect();
+  const embed = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+  await consumer.connect();
+  await consumer.subscribe({ topic: 'user-actions', fromBeginning: false });
+  await consumer.run({
+    eachMessage: async ({ message }) =&gt; {
+      const event = JSON.parse(message.value.toString());
+      const embedding = await embed(event.search_query || '');
+      const sql = `INSERT INTO enriched_features (action_id, embedding) VALUES ($1, $2) ON CONFLICT (action_id) DO UPDATE SET embedding = EXCLUDED.embedding`;
+      await pgClient.query(sql, [event.id, embedding.data]);
+    },
+  });
+}
+
+start().catch(console.error);
+</code></pre>
+<p>The embedding result is cached in memory for the duration of the process; a second‑level cache (e.g., Redis) can be added to reduce duplicate inference for identical queries.</p>
+<h2 id="performancetuning">Performance Tuning</h2>
+<h3 id="partitionedtables">Partitioned Tables</h3>
+<p>Store raw actions in a time‑based partitioned table to keep write amplification low:</p>
+<pre><code>CREATE TABLE user_actions (
+  id BIGSERIAL PRIMARY KEY,
+  user_id UUID NOT NULL,
+  action_type TEXT NOT NULL,
+  payload JSONB,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+) PARTITION BY RANGE (created_at);
+</code></pre>
+<p>Create daily partitions automatically with a cron job or <code>pg_partman</code>.</p>
+<h3 id="replicationlagmitigation">Replication Lag Mitigation</h3>
+<p>Monitor <code>pg_stat_replication</code> and adjust <code>wal_sender_timeout</code> and <code>wal_receiver_status_interval</code> to keep lag under 100 ms. If lag spikes, temporarily increase <code>max_replication_slots</code> and allocate more CPU to the replication worker.</p>
+<h3 id="asynchronousllminferencecaching">Asynchronous LLM Inference Caching</h3>
+<p>Cache embeddings in Redis with a TTL that matches the model’s expected drift (e.g., 24 h). The sidecar checks the cache before invoking the model, reducing GPU utilization and smoothing burst traffic.</p>
+<pre><code>const cacheKey = `embed:${event.search_query}`;
+const cached = await redis.get(cacheKey);
+if (cached) {
+  embedding = JSON.parse(cached);
+} else {
+  embedding = await embed(event.search_query);
+  await redis.set(cacheKey, JSON.stringify(embedding), 'EX', 86400);
+}
+</code></pre>
+<h2 id="tradeoffsandpitfalls">Trade‑offs and Pitfalls</h2>
+<ul>
+<li><strong>Coupling latency</strong> – Embedding generation inside the request path adds tens to hundreds of milliseconds, breaking low‑latency SLAs. The sidecar pattern isolates this cost.</li>
+<li><strong>Schema evolution</strong> – Logical replication streams raw rows; adding a column requires updating the publication and ensuring downstream consumers handle missing fields gracefully.</li>
+<li><strong>Resource contention</strong> – Running the LLM on the same node as the NestJS service can cause CPU starvation. Deploy the sidecar on a GPU‑enabled node pool and use Kubernetes resource limits.</li>
+<li><strong>Event ordering</strong> – Kafka provides per‑partition ordering, but replication may deliver changes out of order across tables. Reconcile order in the consumer if business logic depends on it.</li>
+</ul>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>Combine PostgreSQL logical replication with an event bus to achieve sub‑second data freshness.</li>
+<li>Offload heavyweight AI inference to an asynchronous sidecar; cache results to protect downstream latency.</li>
+<li>Partition raw event tables and monitor replication metrics to keep write and read paths performant.</li>
+<li>Explicitly version schemas and handle missing fields to avoid breaking changes in a CDC pipeline.</li>
+<li>Separate resource pools for API serving and AI inference to maintain predictable SLOs.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
