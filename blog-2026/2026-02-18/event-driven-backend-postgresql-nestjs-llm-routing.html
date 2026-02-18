@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Event-Driven Backend Architecture with PostgreSQL Logical Replication, NestJS Microservices, and LLM-Driven Adaptive Routing</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-02-18
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    An in‑depth exploration of building a high‑throughput, event‑driven backend that combines PostgreSQL logical replication, NestJS microservice patterns, and large‑language‑model inference for dynamic request routing and schema adaptation.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">nestjs</span>
+    <span class="tag">event-driven</span>
+    <span class="tag">ai-integration</span>
+    <span class="tag">distributed-systems</span>
+    <span class="tag">performance</span>
+    <span class="tag">microservices</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>In modern distributed systems, the event log must be both durable and queryable. PostgreSQL logical replication provides a low‑latency, append‑only stream that can serve as the single source of truth for all downstream services. Coupling that stream with a NestJS microservice layer enables clean separation of concerns while preserving strong consistency guarantees. Adding a lightweight LLM side‑car introduces adaptive request routing and runtime schema evolution without sacrificing the deterministic nature of event sourcing.</p>
+<p>The architecture described here targets workloads that exceed tens of thousands of events per second, require fine‑grained saga orchestration, and need to react to evolving business rules that are expressed in natural language. By keeping the AI inference path out of the transaction commit critical path, we avoid cascading latency spikes that would otherwise degrade the write throughput of the primary database.</p>
+<h2 id="coreeventsourcingwithpostgresqllogicalreplication">Core Event Sourcing with PostgreSQL Logical Replication</h2>
+<p>Logical replication streams changes from the write‑ahead log (WAL) as a series of <code>INSERT</code>, <code>UPDATE</code>, and <code>DELETE</code> messages. Each change is wrapped in a logical decoding plugin (for example, <code>wal2json</code>) that emits a JSON payload. The payload becomes the immutable event record that downstream services consume.</p>
+<pre><code>// pg_hba.conf entry for replication user
+host    replication     repl_user       10.0.0.0/24    md5
+
+-- Create publication on the source database
+CREATE PUBLICATION event_pub FOR ALL TABLES;
+
+-- Subscribe from a replica
+CREATE SUBSCRIPTION event_sub
+  CONNECTION 'host=replica.example.com port=5432 user=repl_user password=***** dbname=app'
+  PUBLICATION event_pub;
+</code></pre>
+<p>The subscriber can be a lightweight Node.js process that reads the replication slot, parses the JSON, and forwards each event to a message broker (e.g., NATS or Kafka). Because the replication slot retains WAL segments until they are consumed, the system guarantees at‑least‑once delivery without additional buffering.</p>
+<h2 id="nestjsmicroservicelayercqrsandsagaorchestration">NestJS Microservice Layer: CQRS and Saga Orchestration</h2>
+<p>NestJS provides a modular framework for building microservices that implement the Command‑Query Responsibility Segregation (CQRS) pattern. Commands mutate state, while queries read from materialized views that are built by projecting events.</p>
+<pre><code>// command.handler.ts
+import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
+import { CreateOrderCommand } from './create-order.command';
+import { OrdersRepository } from '../repositories/orders.repository';
+
+@CommandHandler(CreateOrderCommand)
+export class CreateOrderHandler implements ICommandHandler&lt;CreateOrderCommand&gt; {
+  constructor(private readonly repo: OrdersRepository) {}
+
+  async execute(command: CreateOrderCommand) {
+    const order = this.repo.create(command.payload);
+    await this.repo.save(order);
+    // Emit domain event for downstream saga
+    this.repo.publish({ type: 'OrderCreated', data: order });
+  }
+}
+</code></pre>
+<p>Sagas listen to these domain events and coordinate long‑running business processes across multiple services. A typical saga might invoke a payment service, wait for confirmation, and then publish a <code>PaymentConfirmed</code> event that triggers order fulfillment.</p>
+<pre><code>// order.saga.ts
+import { Saga, ofType } from '@nestjs/cqrs';
+import { from, of } from 'rxjs';
+import { delay, map, mergeMap } from 'rxjs/operators';
+
+export class OrderSaga {
+  @Saga()
+  orderCreated = (events$: Observable&lt;any&gt;) =&gt;
+    events$.pipe(
+      ofType('OrderCreated'),
+      mergeMap(event =&gt;
+        from(this.paymentService.authorize(event.data))
+          .pipe(
+            map(result =&gt; ({ type: 'PaymentConfirmed', data: result })),
+            delay(100) // back‑pressure simulation
+          )
+      )
+    );
+}
+</code></pre>
+<p>The saga runs in its own NestJS microservice, isolated from the command side, which allows independent scaling based on event volume.</p>
+<h2 id="llmsidecarforadaptiveroutingandschemaevolution">LLM Side‑car for Adaptive Routing and Schema Evolution</h2>
+<p>A separate process hosts an LLM (e.g., a distilled GPT‑2) behind a gRPC endpoint. The microservice layer queries the LLM when it encounters an unknown request pattern or when a schema change is suggested by business users.</p>
+<pre><code>// llm-client.ts
+import * as grpc from '@grpc/grpc-js';
+import { LlmServiceClient } from './proto/llm_grpc_pb';
+import { RouteRequest, RouteResponse } from './proto/llm_pb';
+
+const client = new LlmServiceClient('localhost:50051', grpc.credentials.createInsecure());
+
+export function inferRoute(payload: any): Promise&lt;RouteResponse&gt; {
+  return new Promise((resolve, reject) =&gt; {
+    const req = new RouteRequest();
+    req.setPayload(JSON.stringify(payload));
+    client.route(req, (err, resp) =&gt; {
+      if (err) return reject(err);
+      resolve(resp);
+    });
+  });
+}
+</code></pre>
+<p>When the LLM returns a routing decision, the NestJS gateway forwards the request to the appropriate microservice. If the LLM suggests a new field in the payload, a schema migration job is queued, allowing the event store to evolve without downtime.</p>
+<pre><code>// adaptive-router.service.ts
+async handle(request: any) {
+  const decision = await inferRoute(request);
+  if (decision.getNeedsMigration()) {
+    await this.migrationQueue.add({ schema: decision.getProposedSchema() });
+  }
+  return this.dispatch(decision.getTargetService(), request);
+}
+</code></pre>
+<p>Because the LLM inference occurs asynchronously, the write path to PostgreSQL remains unaffected. The side‑car can be horizontally scaled behind a load balancer, and its latency is measured separately from transaction commit times.</p>
+<h2 id="performancetuningandbackpressuremanagement">Performance Tuning and Back‑Pressure Management</h2>
+<h3 id="walthroughput">WAL Throughput</h3>
+<p>Increasing <code>wal_buffers</code> to 64 MB and setting <code>max_wal_size</code> to 8 GB reduces checkpoint frequency under heavy load. Enabling <code>wal_compression</code> saves network bandwidth between publisher and subscriber.</p>
+<pre><code>ALTER SYSTEM SET wal_buffers = '64MB';
+ALTER SYSTEM SET max_wal_size = '8GB';
+ALTER SYSTEM SET wal_compression = on;
+SELECT pg_reload_conf();
+</code></pre>
+<h3 id="memorycontexts">Memory Contexts</h3>
+<p>Allocate a dedicated memory context for the logical decoding plugin to avoid fragmentation. In C‑based plugins, use <code>MemoryContextAlloc</code> instead of <code>palloc</code> for large JSON buffers.</p>
+<h3 id="backpressure">Back‑Pressure</h3>
+<p>The subscriber uses a bounded channel (e.g., <code>async.queue</code> with concurrency 10). When the queue fills, the replication slot pauses, causing the publisher to throttle writes automatically. This prevents OOM conditions in downstream services.</p>
+<pre><code>const queue = async.queue(async (event, cb) =&gt; {
+  await processEvent(event);
+  cb();
+}, 10);
+
+queue.saturated(() =&gt; console.warn('Back‑pressure: queue full'));
+</code></pre>
+<p>Monitoring metrics (<code>pg_replication_slots</code>, <code>pg_stat_replication</code>, queue depth) enables proactive scaling of both the replication consumer and the LLM side‑car.</p>
+<h2 id="commonpitfallsailatencycoupling">Common Pitfalls: AI Latency Coupling</h2>
+<p>A frequent mistake is to place the LLM call inside the same transaction that writes the event. If the model takes 200 ms, the transaction holds WAL buffers longer, inflating commit latency and increasing the risk of replication lag. The correct pattern is fire‑and‑forget: write the event, commit, then trigger the LLM inference via an out‑of‑band message (e.g., a Kafka topic). This decouples the AI path from the critical write path and isolates failures to the side‑car.</p>
+<pre><code>// WRONG: LLM inside transaction
+await repo.save(order);
+const route = await inferRoute(order);
+await repo.publish(route);
+
+// RIGHT: Event first, then async LLM
+await repo.save(order);
+await repo.publish({ type: 'OrderCreated', data: order });
+this.llmQueue.add(order); // processed later
+</code></pre>
+<p>By keeping the AI latency out of the commit path, the system maintains high throughput even when the model experiences cold‑start delays.</p>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>PostgreSQL logical replication supplies a reliable, ordered event log without introducing a separate message broker.</li>
+<li>NestJS microservices, combined with CQRS and saga patterns, provide clear boundaries between command handling, projection, and long‑running workflows.</li>
+<li>An LLM side‑car can enrich routing decisions and drive schema evolution, provided it is invoked asynchronously.</li>
+<li>Performance hinges on WAL tuning, dedicated memory contexts, and explicit back‑pressure mechanisms.</li>
+<li>Never couple AI inference latency with transaction commits; use out‑of‑band processing to preserve write performance.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
