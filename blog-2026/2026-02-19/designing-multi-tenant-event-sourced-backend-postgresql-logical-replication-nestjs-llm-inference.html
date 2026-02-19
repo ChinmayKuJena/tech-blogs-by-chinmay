@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Designing a Multi-Tenant Event-Sourced Backend with PostgreSQL Logical Replication, NestJS, and On-Demand LLM Inference</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-02-19
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    This article explores how to build a scalable, multi-tenant event-sourced service using PostgreSQL logical replication for data isolation, NestJS with modern npm tooling for modularity, and on-demand large language model inference as a backend component, covering architecture, implementation patterns, performance tuning, and common pitfalls.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">backend-architecture</span>
+    <span class="tag">postgresql</span>
+    <span class="tag">event-sourcing</span>
+    <span class="tag">nestjs</span>
+    <span class="tag">npm</span>
+    <span class="tag">large-language-models</span>
+    <span class="tag">distributed-systems</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>Multi-tenant, event‑sourced services must guarantee strong data isolation while remaining responsive to high‑throughput workloads. Combining PostgreSQL logical replication with a NestJS monorepo gives a deterministic event store, real‑time change data capture, and a clean module boundary for each tenant. Adding an on‑demand large language model (LLM) inference layer completes the stack, allowing AI‑augmented business logic without sacrificing latency guarantees.</p>
+<p>The architecture described here treats the event store as the single source of truth. Logical replication publishes tenant‑specific streams, which downstream services consume to materialize read models and to trigger LLM inference only when required. NestJS, orchestrated by Nx, provides a versioned, testable codebase where each domain module can evolve independently. The following sections dive into the concrete implementation, performance considerations, and the pitfalls that often surface in distributed AI‑augmented pipelines.</p>
+<h2 id="architectureoverview">Architecture Overview</h2>
+<ul>
+<li><strong>Event Store</strong> – PostgreSQL database with per‑tenant schemas. Logical replication publishes changes from each schema to dedicated replication slots.</li>
+<li><strong>Replication Layer</strong> – <code>pg_logical</code> plugin (or built‑in logical replication) streams <code>INSERT/UPDATE/DELETE</code> events to consumer services.</li>
+<li><strong>NestJS Monorepo</strong> – Nx workspace containing:</li>
+<li>Core library (<code>@myorg/event-store</code>)</li>
+<li>Tenant modules (<code>@myorg/tenant‑&lt;id&gt;</code>)</li>
+<li>LLM inference service (<code>@myorg/llm‑gateway</code>)</li>
+<li><strong>LLM Inference</strong> – Stateless HTTP endpoint that receives enriched events, performs caching, and returns model outputs.</li>
+<li><strong>Back‑Pressure & Caching</strong> – Redis for result caching, RabbitMQ for durable event queues, and a token‑bucket limiter to protect the LLM service.</li>
+</ul>
+<p>The diagram below (conceptual) shows the data flow:</p>
+<pre><code>Tenant Request → NestJS API → Event Store (write) → Logical Replication → Consumer → LLM Service → Cache → Response
+</code></pre>
+<h2 id="eventstorewithpostgresqllogicalreplication">Event Store with PostgreSQL Logical Replication</h2>
+<p>The event store lives in a single PostgreSQL instance but isolates tenants via separate schemas. Each schema contains an <code>events</code> table that follows an append‑only pattern.</p>
+<pre><code>CREATE SCHEMA tenant_1;
+CREATE TABLE tenant_1.events (
+    id BIGSERIAL PRIMARY KEY,
+    aggregate_id UUID NOT NULL,
+    type TEXT NOT NULL,
+    payload JSONB NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+</code></pre>
+<p>A publication aggregates all tenant schemas:</p>
+<pre><code>CREATE PUBLICATION tenant_events FOR ALL TABLES;
+</code></pre>
+<p>Each consumer creates a replication slot per tenant to guarantee at‑least‑once delivery:</p>
+<pre><code>SELECT * FROM pg_create_logical_replication_slot('tenant_1_slot', 'pgoutput');
+</code></pre>
+<p>The consumer reads changes using the <code>pgoutput</code> plugin, deserializes the JSON payload, and forwards the event to the appropriate NestJS handler. Idempotency is enforced by storing the event <code>id</code> in a deduplication table before processing.</p>
+<pre><code>INSERT INTO tenant_1.processed_events (event_id) VALUES ($1) ON CONFLICT DO NOTHING;
+</code></pre>
+<h2 id="nestjsmodularmonorepowithnx">NestJS Modular Monorepo with Nx</h2>
+<p>Nx scaffolds a monorepo where each tenant module is a separate library that depends on the core event‑store library. Versioned npm packages (<code>@myorg/event-store@1.2.0</code>) enable independent schema evolution.</p>
+<pre><code>// libs/event-store/src/event.service.ts
+import { Injectable } from "@nestjs/common";
+import { Pool } from "pg";
+
+@Injectable()
+export class EventService {
+  constructor(private readonly pool: Pool) {}
+
+  async appendEvent(schema: string, event: any): Promise&lt;void&gt; {
+    const query = `INSERT INTO ${schema}.events (aggregate_id, type, payload) VALUES ($1, $2, $3)`;
+    await this.pool.query(query, [event.aggregateId, event.type, event.payload]);
+  }
+}
+</code></pre>
+<p>Custom decorators simplify tenant resolution from the request context:</p>
+<pre><code>// libs/tenant/src/tenant.decorator.ts
+import { createParamDecorator, ExecutionContext } from "@nestjs/common";
+
+export const Tenant = createParamDecorator(
+  (data: unknown, ctx: ExecutionContext) =&gt; {
+    const request = ctx.switchToHttp().getRequest();
+    return request.headers["x-tenant-id"] as string;
+  },
+);
+</code></pre>
+<p>A tenant controller then injects the <code>EventService</code> and uses the decorator:</p>
+<pre><code>// apps/api/src/tenant.controller.ts
+@Controller("events")
+export class TenantController {
+  constructor(private readonly eventService: EventService) {}
+
+  @Post()
+  async create(@Tenant() tenantId: string, @Body() dto: CreateEventDto) {
+    await this.eventService.appendEvent(`tenant_${tenantId}`, dto);
+    return { status: "queued" };
+  }
+}
+</code></pre>
+<p>Nx enforces module boundaries, runs affected tests, and builds versioned packages automatically.</p>
+<h2 id="ondemandllminferenceservice">On-Demand LLM Inference Service</h2>
+<p>The LLM gateway receives enriched events, checks Redis for a cached response, and falls back to the remote model endpoint if necessary.</p>
+<pre><code>// libs/llm-gateway/src/llm.service.ts
+import { Injectable, HttpService } from "@nestjs/common";
+import { Redis } from "ioredis";
+
+@Injectable()
+export class LlmService {
+  private readonly cache = new Redis({ host: "redis", port: 6379 });
+
+  constructor(private readonly http: HttpService) {}
+
+  async infer(prompt: string): Promise&lt;string&gt; {
+    const cached = await this.cache.get(prompt);
+    if (cached) return cached;
+
+    const response = await this.http
+      .post("https://api.llm.provider/v1/completions", { prompt })
+      .toPromise();
+    const result = response.data.choices[0].text;
+    await this.cache.set(prompt, result, "EX", 300); // 5‑minute TTL
+    return result;
+  }
+}
+</code></pre>
+<p>Back‑pressure is applied by limiting concurrent HTTP calls with a semaphore. If the semaphore is exhausted, the consumer re‑queues the event with exponential back‑off.</p>
+<h2 id="performancetuning">Performance Tuning</h2>
+<h3 id="replicationlag">Replication Lag</h3>
+<ul>
+<li>Keep the <code>wal_level</code> at <code>logical</code> and tune <code>max_replication_slots</code> to the number of active tenants.</li>
+<li>Use <code>wal_sender_timeout</code> and <code>wal_receiver_timeout</code> to detect stalled slots early.</li>
+<li>Partition the <code>events</code> table by <code>created_at</code> to reduce index bloat and improve snapshot creation.</li>
+</ul>
+<h3 id="queryplanning">Query Planning</h3>
+<ul>
+<li>Create covering indexes on <code>(aggregate_id, created_at)</code> for fast read‑model reconstruction.</li>
+<li>Enable <code>pg_hint_plan</code> to force index‑only scans on hot paths.</li>
+</ul>
+<h3 id="llmlatency">LLM Latency</h3>
+<ul>
+<li>Cache deterministic prompts; most AI‑augmented workflows repeat identical queries.</li>
+<li>Warm the model by sending a lightweight “ping” request during idle periods.</li>
+<li>Measure end‑to‑end latency with OpenTelemetry spans; set Service Level Objectives (SLOs) at 200 ms for cache hits and 800 ms for cold inference.</li>
+</ul>
+<h3 id="backpressure">Back‑Pressure</h3>
+<ul>
+<li>RabbitMQ <code>prefetch</code> count limits the number of unacknowledged messages per consumer.</li>
+<li>Token‑bucket limiter caps requests to the LLM provider at the contractual QPS.</li>
+</ul>
+<h2 id="commonpitfalls">Common Pitfalls</h2>
+<ol>
+<li><strong>Missing Idempotency</strong> – Without deduplication, replayed events cause duplicate side‑effects in downstream systems. Store processed event IDs in a lightweight table with a TTL index.</li>
+<li><strong>Schema Version Drift</strong> – Tenants evolve at different speeds; publishing a new event type before all consumers understand it leads to deserialization errors. Use a version field in the event payload and route unknown versions to a dead‑letter queue.</li>
+<li><strong>Unbounded Cache Growth</strong> – Storing every prompt indefinitely exhausts Redis memory. Apply an LRU policy and TTLs aligned with business relevance.</li>
+<li><strong>Replication Slot Exhaustion</strong> – Creating a slot per tenant does not scale beyond a few hundred tenants. Group low‑traffic tenants into a shared slot or use a sharded logical replication setup.</li>
+<li><strong>Blocking the Event Loop</strong> – Heavy JSON parsing or synchronous file I/O in NestJS handlers blocks the Node.js event loop, increasing latency. Offload CPU‑intensive work to worker threads or a separate microservice.</li>
+</ol>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>PostgreSQL logical replication provides strong tenant isolation while delivering CDC streams suitable for event sourcing.</li>
+<li>Nx‑managed NestJS monorepos enable modular development, versioned npm packages, and clear boundaries for schema evolution.</li>
+<li>On‑demand LLM inference can be integrated safely by caching, back‑pressure, and explicit idempotency handling.</li>
+<li>Performance hinges on tuning replication parameters, query planning, and latency‑aware caching strategies.</li>
+<li>Anticipating schema drift and replication slot limits prevents operational surprises in large‑scale multi‑tenant deployments.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
