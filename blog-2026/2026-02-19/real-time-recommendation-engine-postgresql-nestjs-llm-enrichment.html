@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Real-Time Recommendation Engine: PostgreSQL Logical Replication, NestJS Event-Driven Architecture, and LLM-Powered Feature Enrichment</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-02-19
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    Explores how to build a low-latency recommendation service by combining PostgreSQL logical replication, NestJS event-sourcing, and large language model feature augmentation, covering design trade-offs, scaling patterns, and production reliability.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">nestjs</span>
+    <span class="tag">event-driven</span>
+    <span class="tag">llm</span>
+    <span class="tag">distributed-systems</span>
+    <span class="tag">performance</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <h2 id="introduction">Introduction</h2>
+<p>Real‑time recommendation systems must ingest user actions, enrich them with contextual signals, and surface personalized results within milliseconds. Achieving that latency while preserving strong consistency across microservices is a classic distributed‑systems problem. This article walks through a production‑grade pipeline that stitches together three pillars: PostgreSQL logical replication for change data capture, a NestJS CQRS‑based event‑driven core, and an asynchronous LLM microservice that adds semantic features to each event.</p>
+<p>The design balances latency, fault tolerance, and operational simplicity. We start with the data‑flow diagram, then dive into each component, explore scaling knobs, and finish with a candid discussion of pitfalls that often surface in multi‑region deployments.</p>
+<h2 id="eventdrivencorearchitecture">Event‑Driven Core Architecture</h2>
+<p>The heart of the system is a NestJS application that follows the Command‑Query Responsibility Segregation (CQRS) pattern. Write‑side commands mutate the primary PostgreSQL instance; read‑side queries hit materialized views that are kept in sync via logical replication.</p>
+<h3 id="logicalreplicationsetup">Logical Replication Setup</h3>
+<ol>
+<li><p>Enable <code>wal_level = logical</code> on the primary.</p></li>
+<li><p>Create a publication for the tables that hold user interactions.</p></li>
+<li><p>Deploy a lightweight subscriber service that consumes the replication stream and publishes domain events to an internal NATS JetStream broker.</p>
+<p>CREATE PUBLICATION user<em>events</em>pub FOR TABLE interactions, clicks;</p>
+<p>The subscriber uses the <code>pgoutput</code> plugin, decodes each change into a JSON envelope, and forwards it to the <code>UserInteraction.Created</code> topic.</p></li>
+</ol>
+<h3 id="nestjseventhandlers">NestJS Event Handlers</h3>
+<pre><code>import { EventsHandler, IEventHandler } from '@nestjs/cqrs';
+import { InteractionCreatedEvent } from '../events/interaction-created.event';
+
+@EventsHandler(InteractionCreatedEvent)
+export class InteractionCreatedHandler implements IEventHandler&lt;InteractionCreatedEvent&gt; {
+  async handle(event: InteractionCreatedEvent) {
+    // Persist to read‑model store
+    await this.readModelRepo.save(event.payload);
+    // Emit to downstream enrichment pipeline
+    this.eventBus.publish(new EnrichInteractionEvent(event.payload.id));
+  }
+}
+</code></pre>
+<p>The handler writes to a partitioned table <code>interactions_view</code> that is indexed for low‑latency lookups. Because the write path is confined to the primary, we retain strong consistency for the source of truth.</p>
+<h2 id="llmdrivenfeatureenrichment">LLM‑Driven Feature Enrichment</h2>
+<p>User actions often lack semantic context—e.g., a click on a product ID tells us little about user intent. An external microservice enriches each interaction by invoking a large language model (LLM) that generates embeddings and categorical tags.</p>
+<h3 id="asyncenrichmentservice">Async Enrichment Service</h3>
+<p>The service subscribes to <code>EnrichInteractionEvent</code> via NATS, fetches the raw interaction record, and calls the LLM API.</p>
+<pre><code>import { Injectable } from '@nestjs/common';
+import { ClientProxy } from '@nestjs/microservices';
+
+@Injectable()
+export class EnrichmentWorker {
+  constructor(private readonly natsClient: ClientProxy) {}
+
+  async process(interactionId: string) {
+    const record = await this.fetchInteraction(interactionId);
+    const llmResponse = await this.callLlm(record.description);
+    await this.storeEnriched(record.id, llmResponse);
+    this.natsClient.emit('InteractionEnriched', { id: record.id });
+  }
+}
+</code></pre>
+<p>The LLM returns a 1536‑dimensional embedding and a set of inferred tags. These are stored in a separate column <code>embedding vector(1536)</code> and a JSONB <code>tags</code> field.</p>
+<h3 id="npmecosystemtooling">npm Ecosystem Tooling</h3>
+<p>We rely on <code>node-postgres</code> for bulk inserts, <code>@nestjs/microservices</code> for NATS integration, and <code>@pinecone-database/pinecone</code> (or an equivalent vector store) for similarity search. The enrichment pipeline runs as a horizontally scalable Kubernetes Deployment with a <code>HorizontalPodAutoscaler</code> keyed on NATS queue depth.</p>
+<h2 id="performancetuninghorizontalscaling">Performance Tuning &amp; Horizontal Scaling</h2>
+<h3 id="partitionedtablesvectorindexes">Partitioned Tables &amp; Vector Indexes</h3>
+<p>The <code>interactions_view</code> table is partitioned by month on the <code>event_timestamp</code> column. Each partition inherits a <code>GIN</code> index on the <code>tags</code> JSONB and an <code>IVFFLAT</code> vector index on <code>embedding</code> using the <code>pgvector</code> extension.</p>
+<pre><code>CREATE TABLE interactions_view (
+  id uuid PRIMARY KEY,
+  user_id uuid NOT NULL,
+  product_id uuid NOT NULL,
+  event_timestamp timestamptz NOT NULL,
+  tags jsonb,
+  embedding vector(1536)
+) PARTITION BY RANGE (event_timestamp);
+
+CREATE INDEX ON interactions_view USING GIN (tags);
+CREATE INDEX ON interactions_view USING ivfflat (embedding) WITH (lists = 100);
+</code></pre>
+<h3 id="backpressurecontrol">Back‑Pressure Control</h3>
+<p>NATS JetStream provides consumer‑level flow control. The NestJS subscriber sets <code>max_ack_pending</code> to a value that matches the average processing latency of the enrichment service. When the queue exceeds this threshold, the publisher automatically throttles replication reads, preventing memory blow‑up.</p>
+<h3 id="horizontalscalingofthereadmodel">Horizontal Scaling of the Read Model</h3>
+<p>Read replicas are provisioned in each availability zone. The NestJS query layer uses a <code>@ReadReplica()</code> decorator that routes SELECTs to the nearest replica. Load balancers distribute traffic based on latency metrics collected by Prometheus.</p>
+<h2 id="pitfallsandtradeoffs">Pitfalls and Trade‑offs</h2>
+<ul>
+<li><strong>Replication Lag</strong> – Logical replication can fall behind under bursty write loads. Monitoring <code>pg_replication_slots</code> lag and configuring <code>wal_sender_timeout</code> mitigates stale reads.</li>
+<li><strong>Schema Evolution</strong> – Adding a column to the published tables requires a coordinated rollout: first add the column with a default, then update the publication, and finally adjust downstream consumers. Skipping a version can cause deserialization errors in the event bus.</li>
+<li><strong>Multi‑Region Consistency</strong> – Replicating across regions introduces network latency. For strict ordering guarantees, keep the write‑side single‑region and rely on read‑only replicas for locality.</li>
+<li><strong>LLM Cost</strong> – Real‑time embedding generation is expensive. Batch requests where possible and cache recent embeddings keyed by content hash.</li>
+</ul>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>PostgreSQL logical replication offers a low‑overhead CDC mechanism that integrates cleanly with NestJS event handling.</li>
+<li>Partitioned tables combined with <code>pgvector</code> indexes enable sub‑100 ms similarity queries on enriched interaction data.</li>
+<li>Asynchronous LLM enrichment decouples heavy AI work from the latency‑critical path, but requires careful back‑pressure management.</li>
+<li>Replication lag and schema changes are the dominant operational risks; proactive monitoring and staged migrations are essential for reliability.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
