@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Real-Time Recommendation Engine on PostgreSQL with NestJS Microservices and LLM Feature Enrichment</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-02-20
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    An in‑depth exploration of building a low‑latency recommendation service that combines PostgreSQL logical replication, NestJS microservice architecture, and large language model‑driven feature generation, covering design patterns, performance tuning, and production trade‑offs.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">nestjs</span>
+    <span class="tag">microservices</span>
+    <span class="tag">llm</span>
+    <span class="tag">real-time</span>
+    <span class="tag">event-sourcing</span>
+    <span class="tag">scalability</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>In many consumer‑facing platforms the latency between a user action and a personalized recommendation must be measured in milliseconds. Achieving that goal while keeping the data model consistent, the system observable, and the architecture extensible requires a careful blend of event‑sourcing, vector search, and asynchronous AI inference.</p>
+<p>This article walks through a production‑grade design that leverages PostgreSQL logical replication as the backbone of an event‑driven CQRS pipeline, NestJS microservices for domain isolation, and a large language model (LLM) that enriches each event with high‑dimensional feature vectors stored in pgvector. The focus is on concrete patterns, performance‑critical settings, and the trade‑offs that arise when moving from a prototype to a resilient service.</p>
+<h2 id="architecturalblueprint">Architectural Blueprint</h2>
+<p>The core of the system follows a classic CQRS split:</p>
+<ul>
+<li><strong>Command side</strong> – NestJS microservices expose gRPC endpoints that accept user actions (click, view, purchase). Each command writes an immutable event row into a PostgreSQL table <code>user_events</code>.</li>
+<li><strong>Query side</strong> – A separate set of services consumes the logical replication stream, materializes read‑optimized views, and augments rows with LLM‑generated embeddings.</li>
+</ul>
+<p>Logical replication provides ordered, low‑overhead change data capture without a third‑party broker. Each microservice runs its own replication slot, guaranteeing at‑least‑once delivery while allowing independent scaling.</p>
+<p>-- Example publication for logical replication<br />
+CREATE PUBLICATION user<em>events</em>pub FOR TABLE user_events;</p>
+<p>The replication slots are managed by a lightweight Node.js worker that forwards WAL records to a Kafka‑like internal queue (implemented with Redis Streams) for back‑pressure handling.</p>
+<h2 id="datapipelinedesign">Data Pipeline Design</h2>
+<p>The pipeline consists of three stages:</p>
+<ol>
+<li><strong>Streaming user actions</strong> – Events are written to <code>user_events</code>. The replication worker extracts the payload, enriches it with a minimal JSON schema, and pushes it to the stream.</li>
+<li><strong>Materialized views</strong> – A consumer service reads the stream, joins with static reference tables (product catalog, user profile), and updates a partitioned table <code>user_event_features</code>. This table is indexed on <code>user_id</code> and <code>event_time</code> for fast range queries.</li>
+<li><strong>LLM‑generated feature vectors</strong> – For each event, an asynchronous LLM inference job produces a dense vector (e.g., 768‑dimensional). The vector is stored in a <code>pgvector</code> column <code>embedding</code> alongside the event row.</li>
+</ol>
+<p>The separation of inference from the request path ensures that the critical path remains CPU‑light and that the LLM can be scaled independently.</p>
+<h2 id="implementationdetails">Implementation Details</h2>
+<h3 id="nestjsgrpcservicecommandside">NestJS gRPC Service (Command side)</h3>
+<pre><code>// recommendation.service.ts
+import { GrpcMethod } from '@nestjs/microservices';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { UserEvent } from './entities/user-event.entity';
+
+@Injectable()
+export class RecommendationService {
+  constructor(
+    @InjectRepository(UserEvent)
+    private readonly eventRepo: Repository&lt;UserEvent&gt;,
+  ) {}
+
+  @GrpcMethod('Recommendation', 'RecordAction')
+  async recordAction(request: RecordActionRequest): Promise&lt;RecordActionResponse&gt; {
+    const event = this.eventRepo.create({
+      userId: request.userId,
+      productId: request.productId,
+      action: request.action,
+      metadata: request.metadata,
+    });
+    await this.eventRepo.save(event);
+    return { success: true, eventId: event.id };
+  }
+}
+</code></pre>
+<p>The service writes directly to PostgreSQL; the transaction is committed before the response is returned, guaranteeing durability.</p>
+<h3 id="logicaldecodingworkernodejs">Logical Decoding Worker (Node.js)</h3>
+<pre><code>// replication-worker.js
+const { Client } = require('pg');
+const Redis = require('ioredis');
+const client = new Client({ connectionString: process.env.DATABASE_URL });
+const redis = new Redis(process.env.REDIS_URL);
+
+async function start() {
+  await client.connect();
+  const slotName = 'event_slot';
+  await client.query(`SELECT * FROM pg_create_logical_replication_slot($1, 'pgoutput')`, [slotName]);
+  const stream = client.query(copyTo(`START_REPLICATION SLOT ${slotName} LOGICAL 0/0`));
+  // Parse WAL messages, extract JSON, push to Redis stream "event_stream"
+}
+
+start();
+</code></pre>
+<p>The worker decodes WAL records, transforms them into a flat JSON payload, and pushes them to <code>event_stream</code>. Back‑pressure is handled by pausing the replication stream when the Redis consumer lag exceeds a configurable threshold.</p>
+<h3 id="llminferenceserviceasyncworker">LLM Inference Service (Async worker)</h3>
+<pre><code>// inference-worker.ts
+import { createClient } from '@supabase/supabase-js';
+import { OpenAI } from 'openai';
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+async function processEvent(event) {
+  const prompt = `Generate a feature vector for a user action: ${JSON.stringify(event)}`;
+  const response = await openai.embeddings.create({ model: 'text-embedding-3-large', input: prompt });
+  const embedding = response.data[0].embedding;
+  await supabase
+    .from('user_event_features')
+    .update({ embedding })
+    .eq('id', event.id);
+}
+
+// Consumer loop reads from Redis stream and calls processEvent
+</code></pre>
+<p>The embedding column is defined as <code>vector(768)</code> using the pgvector extension.</p>
+<h2 id="performancescaling">Performance &amp; Scaling</h2>
+<h3 id="partitionedtables">Partitioned Tables</h3>
+<pre><code>CREATE TABLE user_event_features (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  event_time TIMESTAMPTZ NOT NULL,
+  embedding VECTOR(768),
+  ...
+) PARTITION BY RANGE (event_time);
+</code></pre>
+<p>Monthly partitions keep index sizes manageable and enable parallel scans during recommendation queries.</p>
+<h3 id="parallellogicaldecoding">Parallel Logical Decoding</h3>
+<p>Running multiple replication slots, each bound to a distinct subset of tables (or using row‑level filters), allows the system to scale the ingestion path horizontally. The worker processes can be containerized and autoscaled based on stream lag metrics.</p>
+<h3 id="cachefirstinference">Cache‑First Inference</h3>
+<p>Frequently accessed embeddings are cached in Redis with an LRU policy. The recommendation query first attempts a vector similarity search against the cache; a cache miss falls back to a PostgreSQL <code>SELECT ... ORDER BY embedding &lt;=&gt; query_vector LIMIT k</code> query.</p>
+<h3 id="backpressurehandling">Back‑Pressure Handling</h3>
+<p>The replication worker monitors the length of the Redis stream. If the length exceeds <code>MAX_LAG</code>, the worker issues a <code>pg_replication_pause</code> command (available in recent PostgreSQL versions) to temporarily halt WAL emission, preventing memory exhaustion downstream.</p>
+<h2 id="pitfallmitigation">Pitfall Mitigation</h2>
+<ul>
+<li><strong>Avoiding synchronous AI calls</strong> – Embedding generation is deliberately decoupled from the gRPC request. Synchronous calls would add tens to hundreds of milliseconds, violating latency SLAs.</li>
+<li><strong>Schema evolution</strong> – Event tables use a JSONB <code>payload</code> column for optional fields. Adding new attributes does not require a migration; downstream consumers read only the keys they understand.</li>
+<li><strong>Eventual consistency</strong> – Recommendations may be based on slightly stale embeddings. The system tolerates this because the business impact of a few seconds of staleness is negligible compared to the latency benefit.</li>
+<li><strong>Failure isolation</strong> – Each microservice runs in its own Kubernetes pod with health probes. The LLM worker can be restarted independently without affecting the command side.</li>
+</ul>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>PostgreSQL logical replication provides a low‑overhead, ordered event stream suitable for CQRS architectures.</li>
+<li>NestJS microservices combined with gRPC give a type‑safe command interface while keeping the query side independent.</li>
+<li>Offloading LLM inference to an asynchronous worker preserves request‑path latency and enables independent scaling of the expensive AI component.</li>
+<li>Partitioned tables, vector indexes, and cache‑first strategies are essential to meet sub‑100 ms recommendation latency at scale.</li>
+<li>Designing for eventual consistency and schema‑agnostic events mitigates operational risk during rapid feature iteration.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
