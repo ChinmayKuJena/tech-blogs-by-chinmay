@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Event‑Driven Order Orchestration with NestJS, PostgreSQL Logical Replication, and LLM‑Based Business Rules</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-02-23
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    An in‑depth guide to constructing a scalable, event‑driven order processing pipeline that fuses NestJS microservices, PostgreSQL logical replication, and a large language model rule engine, covering architecture, implementation, and production trade‑offs.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">backend-architecture</span>
+    <span class="tag">postgresql</span>
+    <span class="tag">nestjs</span>
+    <span class="tag">ai-integration</span>
+    <span class="tag">event-driven</span>
+    <span class="tag">distributed-systems</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <h2 id="introduction">Introduction</h2>
+<p>Modern e‑commerce platforms must react to a continuous stream of order events while applying complex business logic that evolves rapidly. A traditional monolith quickly becomes a bottleneck when the rule set grows, latency requirements tighten, and the need for auditability rises. This article shows how to combine three proven techniques—NestJS microservices, PostgreSQL logical replication for change data capture (CDC), and a large language model (LLM) powered rule engine—to build a resilient, scalable order orchestration pipeline.</p>
+<p>The solution treats PostgreSQL as the single source of truth, leverages CDC to fan‑out changes to stateless services, and delegates rule evaluation to an LLM that can be updated without redeploying code. The resulting architecture supports hybrid CQRS/ES patterns, graceful back‑pressure handling, and fine‑grained observability.</p>
+<hr />
+<h2 id="architectureoverview">Architecture Overview</h2>
+<p>The high‑level diagram consists of four layers:</p>
+<ol>
+<li><strong>Core Domain Service</strong> – a NestJS microservice that owns the <code>orders</code> table and writes all state changes.</li>
+<li><strong>Logical Replication Publisher</strong> – PostgreSQL streams <code>INSERT</code>, <code>UPDATE</code>, and <code>DELETE</code> events via a replication slot.</li>
+<li><strong>CDC Consumer</strong> – a NestJS service that subscribes to the replication stream, transforms rows into domain events, and publishes them on an internal event bus.</li>
+<li><strong>LLM Rule Engine</strong> – a containerized inference service exposing a REST endpoint; it receives events, evaluates business rules expressed in natural language, and returns actions (e.g., approve, hold, route).</li>
+</ol>
+<p>The flow is:</p>
+<p><code>Order Service → PostgreSQL → Replication Slot → CDC Consumer → Event Bus → LLM Engine → Action Dispatcher → Order Service</code></p>
+<p>All services are stateless; persistence lives exclusively in PostgreSQL, which simplifies recovery and enables event replay.</p>
+<hr />
+<h2 id="settinguppostgresqllogicalreplication">Setting Up PostgreSQL Logical Replication</h2>
+<p>First enable replication in <code>postgresql.conf</code>:</p>
+<pre><code>wal_level = logical
+max_replication_slots = 10
+max_wal_senders = 10
+shared_preload_libraries = 'pgoutput'
+</code></pre>
+<p>Create a publication that includes the <code>orders</code> table:</p>
+<pre><code>CREATE PUBLICATION orders_pub FOR TABLE orders;
+</code></pre>
+<p>Create a replication slot for the CDC consumer (run once):</p>
+<pre><code>SELECT * FROM pg_create_logical_replication_slot('orders_slot', 'pgoutput');
+</code></pre>
+<p>The slot will retain WAL until the consumer acknowledges receipt, guaranteeing at‑least‑once delivery.</p>
+<hr />
+<h2 id="nestjscdcconsumerservice">NestJS CDC Consumer Service</h2>
+<p>The consumer uses the <code>pg-logical-replication</code> npm package (or a thin wrapper around <code>pg</code> with <code>START_REPLICATION</code>). The service runs inside a Docker container and connects to the replication slot.</p>
+<pre><code>import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { Client } from 'pg';
+import { EventBus } from '@nestjs/cqrs';
+
+@Injectable()
+export class CdcService implements OnModuleInit, OnModuleDestroy {
+  private client: Client;
+  private readonly slot = 'orders_slot';
+  private readonly publication = 'orders_pub';
+
+  constructor(private readonly eventBus: EventBus) {}
+
+  async onModuleInit() {
+    this.client = new Client({
+      connectionString: process.env.PG_REPL_URL,
+    });
+    await this.client.connect();
+    const query = `START_REPLICATION SLOT ${this.slot} LOGICAL 0/0 (proto_version '1', publication_names '${this.publication}')`;
+    const stream = this.client.query(new (require('pg').QueryStream)(query));
+    stream.on('data', this.handleMessage.bind(this));
+    stream.on('error', err =&gt; console.error('CDC error', err));
+  }
+
+  async onModuleDestroy() {
+    await this.client.end();
+  }
+
+  private async handleMessage(msg: any) {
+    const payload = JSON.parse(msg.payload);
+    // Transform raw row into a domain event
+    const event = {
+      type: payload.change[0].kind === 'insert' ? 'OrderCreated' : 'OrderUpdated',
+      data: payload.change[0].columnvalues,
+    };
+    this.eventBus.publish(event);
+    // Acknowledge LSN to advance slot
+    const lsn = msg.lsn;
+    await this.client.query(`SELECT pg_logical_slot_get_binary_change('${this.slot}', NULL, NULL, '${lsn}')`);
+  }
+}
+</code></pre>
+<p>The service publishes plain JavaScript objects; downstream listeners can filter by <code>type</code>.</p>
+<hr />
+<h2 id="llmruleengineservice">LLM Rule Engine Service</h2>
+<p>The rule engine runs in its own container, exposing a <code>/evaluate</code> endpoint that accepts a JSON payload:</p>
+<pre><code>{
+  "order": { ... },
+  "event": "OrderCreated"
+}
+</code></pre>
+<p>The inference backend can be any OpenAI‑compatible model (e.g., Llama‑2‑70B). A thin Express wrapper handles request throttling and vector cache warm‑up.</p>
+<pre><code>const express = require('express');
+const bodyParser = require('body-parser');
+const { OpenAI } = require('openai');
+const app = express();
+app.use(bodyParser.json());
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, baseURL: process.env.OPENAI_BASE_URL });
+
+const cache = new Map(); // simple in‑memory vector cache
+
+app.post('/evaluate', async (req, res) =&gt; {
+  const { order, event } = req.body;
+  const cacheKey = `${event}:${order.id}`;
+  if (cache.has(cacheKey)) {
+    return res.json({ action: cache.get(cacheKey) });
+  }
+  const prompt = `Given the order data ${JSON.stringify(order)} and the event ${event}, decide whether to APPROVE, HOLD, or REJECT. Respond with only the action.`;
+  const completion = await client.chat.completions.create({
+    model: 'llama-2-70b',
+    messages: [{ role: 'user', content: prompt }],
+    temperature: 0,
+  });
+  const action = completion.choices[0].message.content.trim();
+  cache.set(cacheKey, action);
+  res.json({ action });
+});
+
+app.listen(3000, () =&gt; console.log('LLM engine listening'));
+</code></pre>
+<p>The service is deliberately stateless; caching is optional and can be swapped for a Redis layer when scaling.</p>
+<hr />
+<h2 id="integratingnestjswiththellmengine">Integrating NestJS with the LLM Engine</h2>
+<p>A second NestJS microservice (or the same one) subscribes to events from the CDC consumer and forwards them to the LLM engine.</p>
+<pre><code>@Injectable()
+export class RuleEvaluationHandler {
+  constructor(@Inject('LLM_HTTP') private readonly http: HttpService) {}
+
+  @EventsHandler('OrderCreated')
+  async handle(event: any) {
+    const response = await this.http.post('http://llm-engine:3000/evaluate', {
+      order: event.data,
+      event: event.type,
+    }).toPromise();
+    const action = response.data.action;
+    // Emit a downstream command based on LLM output
+    this.eventBus.publish({ type: 'OrderAction', data: { orderId: event.data.id, action } });
+  }
+}
+</code></pre>
+<p>The <code>OrderAction</code> event can be consumed by a command handler that updates the order status in PostgreSQL, ensuring the source of truth remains consistent.</p>
+<hr />
+<h2 id="performanceoptimizations">Performance Optimizations</h2>
+<h3 id="replicationlag">Replication Lag</h3>
+<ul>
+<li><strong>Slot retention</strong> – keep <code>max_replication_slots</code> high enough to avoid slot drops under burst traffic.</li>
+<li><strong>Batching</strong> – accumulate up to 100 rows before publishing to the event bus; reduces network overhead.</li>
+</ul>
+<h3 id="backpressurehandling">Back‑Pressure Handling</h3>
+<p>NestJS <code>RxJS</code> streams allow you to pause the replication cursor when the downstream queue exceeds a threshold. Use <code>pause()</code>/<code>resume()</code> on the <code>pg-query-stream</code> object.</p>
+<h3 id="llminferencelatency">LLM Inference Latency</h3>
+<ul>
+<li><strong>Connection pooling</strong> – reuse HTTP/HTTPS connections to the inference service.</li>
+<li><strong>Vector cache</strong> – store recent order embeddings; identical orders skip model evaluation.</li>
+<li><strong>Adaptive sharding</strong> – spin up additional inference containers when request latency &gt; 200 ms; route based on a simple round‑robin DNS entry.</li>
+</ul>
+<h3 id="monitoring">Monitoring</h3>
+<p>Expose Prometheus metrics from each service:</p>
+<pre><code># HELP cdc_lag_seconds Current replication lag
+# TYPE cdc_lag_seconds gauge
+cdc_lag_seconds 0.42
+
+# HELP llm_inference_seconds Histogram of LLM response times
+# TYPE llm_inference_seconds histogram
+llm_inference_seconds_bucket{le="0.1"} 12
+llm_inference_seconds_bucket{le="0.5"} 58
+llm_inference_seconds_bucket{le="1"} 85
+llm_inference_seconds_bucket{le="+Inf"} 100
+</code></pre>
+<hr />
+<h2 id="tradeoffsandpitfalls">Trade‑offs and Pitfalls</h2>
+<ul>
+<li><strong>Idempotency</strong> – CDC delivers at‑least‑once events; the rule handler must be idempotent. Store a processed‑event hash in a lightweight table and skip duplicates.</li>
+<li><strong>Schema Versioning</strong> – Adding columns to <code>orders</code> without updating the replication publication can cause missing fields in downstream events. Use a migration script that also updates the publication definition.</li>
+<li><strong>LLM Hallucination</strong> – The model may return an unsupported action. Guard the downstream command handler with a whitelist (<code>APPROVE</code>, <code>HOLD</code>, <code>REJECT</code>).</li>
+<li><strong>Latency Spikes</strong> – A cold LLM container can add seconds of delay. Warm the container with a periodic dummy request.</li>
+<li><strong>Operational Complexity</strong> – Running logical replication, multiple NestJS services, and an inference container increases the surface area. Automate deployment with Helm charts and enforce health checks.</li>
+</ul>
+<hr />
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>PostgreSQL logical replication provides a reliable CDC source without additional tooling.</li>
+<li>NestJS offers a clean event‑bus abstraction that decouples CDC ingestion from business‑logic evaluation.</li>
+<li>An LLM‑driven rule engine can be introduced as a stateless microservice, enabling rapid rule changes without code redeploys.</li>
+<li>Production readiness demands explicit handling of idempotency, schema evolution, and latency management.</li>
+<li>Monitoring replication lag, back‑pressure, and inference latency together gives a holistic view of system health.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
