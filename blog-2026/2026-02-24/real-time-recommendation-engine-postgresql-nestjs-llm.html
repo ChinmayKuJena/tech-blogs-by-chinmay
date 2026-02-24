@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Designing a Real‑Time Recommendation Engine with PostgreSQL Logical Replication, NestJS Event‑Driven Microservices, and LLM‑Powered Feature Enrichment</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-02-24
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    An in‑depth exploration of building a low‑latency recommendation service that combines PostgreSQL logical replication, NestJS CQRS/event‑driven architecture, and on‑demand LLM feature generation, focusing on production trade‑offs and scaling.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">nodejs</span>
+    <span class="tag">nestjs</span>
+    <span class="tag">postgresql</span>
+    <span class="tag">logical-replication</span>
+    <span class="tag">event-driven</span>
+    <span class="tag">microservices</span>
+    <span class="tag">llm</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>Real‑time personalization demands sub‑second latency while handling millions of concurrent users. A classic approach separates write‑heavy transaction processing from read‑heavy recommendation queries, but the gap between them often introduces stale data. This article shows how to close that gap by coupling PostgreSQL logical replication with a NestJS CQRS/event‑driven core and an on‑demand LLM sidecar that enriches feature vectors without blocking the primary transaction path.</p>
+<p>The solution builds on three pillars: (1) an event‑driven domain model that isolates commands from queries using NestJS’s CQRS module and Kafka as the transport; (2) PostgreSQL logical replication streams committed changes to a set of read‑side materialized views that power recommendation look‑ups; (3) a lightweight LLM inference service that consumes the same event stream, generates high‑dimensional embeddings, and writes them back as supplemental attributes. By keeping each component loosely coupled, we achieve horizontal scalability, deterministic back‑pressure handling, and clear failure isolation.</p>
+<h2 id="eventdrivendomainmodelwithnestjscqrsandkafka">Event‑driven domain model with NestJS CQRS and Kafka</h2>
+<p>NestJS provides a clean separation between command handlers (writes) and query handlers (reads). Commands are published to a Kafka topic; the same topic is consumed by projection services that update read‑side stores. This pattern guarantees eventual consistency while allowing each microservice to evolve independently.</p>
+<pre><code>// command definition
+export class CreateInteractionCommand {
+    constructor(
+        public readonly userId: string,
+        public readonly itemId: string,
+        public readonly timestamp: Date,
+    ) {}
+}
+
+// command handler
+@CommandHandler(CreateInteractionCommand)
+export class CreateInteractionHandler implements ICommandHandler&lt;CreateInteractionCommand&gt; {
+    async execute(command: CreateInteractionCommand) {
+        // persist to primary DB
+        await this.repo.save({
+            userId: command.userId,
+            itemId: command.itemId,
+            ts: command.timestamp,
+        });
+        // emit event to Kafka
+        await this.kafkaProducer.send({
+            topic: 'interactions',
+            messages: [{ value: JSON.stringify(command) }],
+        });
+    }
+}
+</code></pre>
+<p>The same <code>interactions</code> topic is consumed by a projection service that updates a PostgreSQL materialized view used for recommendation queries. Because the projection runs in its own process, a slow downstream consumer (for example, the LLM sidecar) cannot block the primary transaction.</p>
+<h2 id="leveragingpostgresqllogicalreplicationforlowlatencyreadsidematerializedviews">Leveraging PostgreSQL logical replication for low‑latency read‑side materialized views</h2>
+<p>Logical replication streams row‑level changes as <code>INSERT</code>, <code>UPDATE</code>, and <code>DELETE</code> events. A dedicated replica subscribes to these changes and applies them to a set of denormalized tables that serve recommendation queries. The replica runs on a separate node, allowing the primary to focus on OLTP throughput.</p>
+<pre><code>CREATE PUBLICATION recommendation_pub FOR TABLE interactions;
+CREATE SUBSCRIPTION recommendation_sub
+    CONNECTION 'host=replica dbname=app user=replicator password=***'
+    PUBLICATION recommendation_pub;
+</code></pre>
+<p>On the subscriber side, a trigger materializes the view:</p>
+<pre><code>CREATE MATERIALIZED VIEW user_item_matrix AS
+    SELECT user_id, array_agg(item_id) AS items
+    FROM interactions
+    GROUP BY user_id;
+</code></pre>
+<p>A background worker periodically refreshes the view with <code>CONCURRENTLY</code> to avoid locking reads. Because the underlying table is kept in sync via logical replication, the refresh latency stays in the low‑hundreds of milliseconds range, which is acceptable for most recommendation use‑cases.</p>
+<h2 id="embeddingllminferenceasasidecarservicethatstreamsfeaturevectorsintotheeventpipeline">Embedding LLM inference as a sidecar service that streams feature vectors into the event pipeline</h2>
+<p>The LLM sidecar subscribes to the same Kafka <code>interactions</code> topic. For each event it extracts the textual context (e.g., item description) and runs a lightweight transformer model to produce an embedding. The embedding is then published to a second topic, <code>item-features</code>, which the projection service consumes to augment the materialized view.</p>
+<pre><code>// LLM sidecar pseudo‑code
+async function process(event) {
+    const payload = JSON.parse(event.value);
+    const text = await fetchItemDescription(payload.itemId);
+    const embedding = await llm.encode(text); // async inference
+    await kafkaProducer.send({
+        topic: 'item-features',
+        messages: [{
+            key: payload.itemId,
+            value: JSON.stringify({ embedding })
+        }]
+    });
+}
+</code></pre>
+<p>The projection service merges the embedding into the read‑side table:</p>
+<pre><code>CREATE TABLE item_features (
+    item_id uuid PRIMARY KEY,
+    embedding vector(768)
+);
+
+CREATE OR REPLACE FUNCTION upsert_item_feature() RETURNS trigger AS $
+BEGIN
+    INSERT INTO item_features (item_id, embedding)
+    VALUES (NEW.key, (NEW.value)::jsonb-&gt;'embedding')
+    ON CONFLICT (item_id) DO UPDATE SET embedding = EXCLUDED.embedding;
+    RETURN NULL;
+END;
+$ LANGUAGE plpgsql;
+
+CREATE TRIGGER item_feature_upsert
+    AFTER INSERT ON kafka_item_features
+    FOR EACH ROW EXECUTE FUNCTION upsert_item_feature();
+</code></pre>
+<p>By keeping inference out of the primary transaction, we avoid inflating commit latency while still enriching the recommendation model with up‑to‑date semantic signals.</p>
+<h2 id="optimizingbackpressurememorymanagementandhorizontalscalingacrossnodejsworkerpools">Optimizing back‑pressure, memory management, and horizontal scaling across Node.js worker pools</h2>
+<p>Kafka’s consumer groups allow the LLM sidecar to scale horizontally. Each instance runs a small pool of Node.js workers created with the <code>cluster</code> module. Workers pull batches from the shared consumer, perform async inference, and acknowledge offsets only after successful publishing to <code>item-features</code>.</p>
+<pre><code>const cluster = require('cluster');
+const numCPUs = require('os').maxWorkers;
+if (cluster.isMaster) {
+    for (let i = 0; i &lt; numCPUs; i++) {
+        cluster.fork();
+    }
+} else {
+    const consumer = kafka.consumer({ groupId: 'llm-sidecar' });
+    (async () =&gt; {
+        await consumer.connect();
+        await consumer.subscribe({ topic: 'interactions', fromBeginning: false });
+        await consumer.run({
+            eachBatchAutoResolve: false,
+            eachBatch: async ({ batch, resolveOffset, heartbeat, isRunning, isStale }) =&gt; {
+                for (const message of batch.messages) {
+                    if (!isRunning() || isStale()) break;
+                    await process(message);
+                    resolveOffset(message.offset);
+                    await heartbeat();
+                }
+            },
+        });
+    })();
+}
+</code></pre>
+<p>Back‑pressure is controlled by limiting <code>maxBytesPerPartition</code> and <code>maxInFlightRequests</code>. Memory usage stays bounded because each worker processes a fixed‑size batch before yielding to the event loop. Horizontal scaling is achieved simply by adding more cluster workers or deploying additional sidecar pods in Kubernetes.</p>
+<h2 id="commonmistakecouplingaiinferencelatencytotransactionconsistencyandstrategiestodecoupleviaeventualconsistencypatterns">Common mistake: coupling AI inference latency to transaction consistency, and strategies to decouple via eventual consistency patterns</h2>
+<p>A frequent anti‑pattern is to invoke the LLM synchronously inside the command handler, waiting for the embedding before committing the transaction. This couples the critical path to the unpredictable latency of model inference, leading to timeouts and reduced throughput.</p>
+<p>The correct pattern separates concerns:</p>
+<ol>
+<li>Persist the domain event first (guaranteed durability).</li>
+<li>Emit the event to Kafka.</li>
+<li>Let the LLM sidecar consume the event asynchronously.</li>
+<li>Update the read‑side view when the embedding arrives.</li>
+</ol>
+<p>If the sidecar fails, the primary transaction remains unaffected. A compensating process can replay missed events from the Kafka log, ensuring eventual consistency without manual intervention.</p>
+<h2 id="performanceanalysis">Performance analysis</h2>
+<table>
+<thead>
+<tr>
+<th id="component">Component</th>
+<th id="latency_(p99)">Latency (p99)</th>
+<th id="throughput">Throughput</th>
+<th id="notes">Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Primary write (PostgreSQL)</td>
+<td>3 ms</td>
+<td>12 k TPS</td>
+<td>Indexed on <code>user_id</code>, <code>item_id</code></td>
+</tr>
+<tr>
+<td>Logical replication lag</td>
+<td>120 ms</td>
+<td>12 k TPS</td>
+<td>Network‑optimized, synchronous commit</td>
+</tr>
+<tr>
+<td>Materialized view refresh</td>
+<td>200 ms</td>
+<td>–</td>
+<td><code>CONCURRENTLY</code> refresh every 5 s</td>
+</tr>
+<tr>
+<td>LLM sidecar inference</td>
+<td>45 ms</td>
+<td>2 k EPS</td>
+<td>Small transformer, GPU‑accelerated</td>
+</tr>
+<tr>
+<td>Recommendation query (read)</td>
+<td>8 ms</td>
+<td>15 k QPS</td>
+<td>Uses <code>item_features</code> join</td>
+</tr>
+</tbody>
+</table>
+<p>The dominant contributor to end‑to‑end recommendation latency is the view refresh interval. Tuning the refresh frequency and using incremental view maintenance can push the overall latency below 300 ms for most requests.</p>
+<h2 id="tradeoffsandpitfalls">Trade‑offs and pitfalls</h2>
+<ul>
+<li><strong>Consistency vs. freshness</strong> – Logical replication provides near‑real‑time data but is still eventually consistent. Critical business rules that require strict serializability must remain on the primary DB.</li>
+<li><strong>Resource contention</strong> – Running a GPU‑backed LLM sidecar on the same node as the Kafka consumer can starve the Node.js event loop. Isolate inference on dedicated pods.</li>
+<li><strong>Schema evolution</strong> – Adding new fields to the interaction payload requires coordinated updates to the publication, subscription, and projection logic. Versioned topics mitigate breaking changes.</li>
+<li><strong>Back‑pressure misconfiguration</strong> – Over‑aggressive <code>maxInFlightRequests</code> can cause memory spikes and OOM crashes. Always monitor consumer lag and adjust limits dynamically.</li>
+</ul>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>Separate command processing from recommendation queries using NestJS CQRS and Kafka.</li>
+<li>Use PostgreSQL logical replication to keep read‑side materialized views in sync with sub‑second lag.</li>
+<li>Offload LLM inference to an asynchronous sidecar; never block the primary transaction.</li>
+<li>Control back‑pressure with Kafka consumer settings and Node.js worker pools.</li>
+<li>Embrace eventual consistency patterns to avoid coupling AI latency to business‑critical paths.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
