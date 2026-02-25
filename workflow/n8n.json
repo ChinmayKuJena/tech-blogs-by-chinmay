@@ -1,0 +1,455 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "mode": "markdownToHtml",
+        "markdown": "={{ $json.data.content }}",
+        "options": {
+          "simplifiedAutoLink": true,
+          "backslashEscapesHTMLTags": false,
+          "completeHTMLDocument": false,
+          "customizedHeaderId": true,
+          "emoji": true,
+          "simpleLineBreaks": true,
+          "tablesHeaderId": true,
+          "tables": true
+        }
+      },
+      "type": "n8n-nodes-base.markdown",
+      "typeVersion": 1,
+      "position": [
+        1056,
+        1128
+      ],
+      "id": "59ddaf37-736d-43bf-9c21-7fec37b09578",
+      "name": "Markdown"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a senior software engineer and professional technical writer.\nYou are given structured blog metadata and an outline.\nYour task is to write a production-quality technical article in clean Markdown format.\n\nINPUT DATA\nTitle: {{ $json.data.meta.title }}\nDescription: {{ $json.data.meta.description }}\nTags: {{ $json.data.meta.tags }}\nOutline:\n{{ $json.data.topic_outline }}\nSlug: {{ $json.data.meta.slug }}\nDate: {{ $json.data.meta.date }}\n\nCRITICAL OUTPUT REQUIREMENTS\n1. Return ONLY raw JSON. No markdown code fences. No backticks. No ```json prefix.\n2. Your entire response must be parseable as JSON.\n3. Do not add any text before or after the JSON object.\n4. The first character must be { and the last character must be }\n\nREQUIRED JSON STRUCTURE\n{\n  \"meta\": {\n    \"title\": \"{{ $json.data.meta.title }}\",\n    \"date\": \"{{ $json.data.meta.date }}\",\n    \"description\": \"{{ $json.data.meta.description }}\",\n    \"tags\": [{{ $json.data.meta.tags }}],\n    \"slug\": \"{{ $json.data.meta.slug }}\"\n  },\n  \"content\": \"Full markdown article as a single escaped string\"\n}\n\nMETA RULES\n- Use the provided meta values exactly as given\n- Do NOT modify title, slug, date, or description\n- Do NOT regenerate these fields\n\nCONTENT RULES\n- Write comprehensive technical Markdown inside the \"content\" field\n- Properly escape quotes and newlines in the JSON string\n- Use \\n for line breaks within the content string\n- No frontmatter inside content\n- No inline HTML or emojis\n\nMARKDOWN STRUCTURE\n- Technical introduction (2-3 paragraphs)\n- ## Second-level headings for main sections\n- Deep technical explanations\n- Code blocks with language identifiers\n- Real implementation examples\n- Performance analysis\n- Trade-offs and pitfalls\n- Final section: ## Key Takeaways\n\nWRITING STYLE\n- Direct, precise technical writing\n- No marketing language or motivational content\n- No generic AI phrases like \"in today's world\" or \"let's dive in\"\n- Varied sentence structures\n- Paragraphs: 4-6 lines maximum\n- Logical progression of ideas\n\nVALIDATION CHECKLIST\nBefore responding, verify:\n[ ] First character is {\n[ ] Last character is }\n[ ] No ``` or code fence markers anywhere\n[ ] All strings properly escaped\n[ ] Valid JSON syntax\n[ ] Meta fields match input exactly\n\nReturn only the JSON object now.",
+        "needsFallback": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        480,
+        1056
+      ],
+      "id": "9409ba8c-b127-41b2-8a4b-58bd96e2beb6",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "groq/compound-mini",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        488,
+        1280
+      ],
+      "id": "5b3d9c25-0bf2-4d84-a014-8ad40a0f449a",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "qoiYBkCB3wBY5MQQ",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "html": "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"UTF-8\">\n<style>\nbody {\n  margin: 0;\n  padding: 0;\n  background-color: #f6f8fa;\n  font-family: -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Helvetica, Arial, sans-serif;\n}\n\n.wrapper {\n  max-width: 760px;\n  margin: 40px auto;\n  background: #ffffff;\n  padding: 48px;\n  border-radius: 12px;\n  box-shadow: 0 8px 24px rgba(0,0,0,0.06);\n  line-height: 1.7;\n  color: #111827;\n}\n\nh1 {\n  font-size: 34px;\n  margin-bottom: 12px;\n  line-height: 1.3;\n}\n\n.meta {\n  font-size: 14px;\n  color: #6b7280;\n  margin-bottom: 20px;\n}\n\n.description {\n  font-size: 18px;\n  color: #374151;\n  margin-bottom: 28px;\n}\n\n.tags {\n  margin-bottom: 32px;\n}\n\n.tag {\n  display: inline-block;\n  background: #eef2ff;\n  color: #3730a3;\n  padding: 6px 12px;\n  border-radius: 999px;\n  font-size: 13px;\n  margin-right: 6px;\n  margin-bottom: 6px;\n}\n\nh2 {\n  margin-top: 36px;\n  font-size: 24px;\n  border-bottom: 1px solid #e5e7eb;\n  padding-bottom: 6px;\n}\n\nh3 {\n  margin-top: 28px;\n  font-size: 18px;\n}\n\np {\n  margin: 16px 0;\n}\n\ncode {\n  background: #f3f4f6;\n  padding: 4px 8px;\n  border-radius: 6px;\n  font-size: 14px;\n  font-family: \"SFMono-Regular\", Consolas, \"Liberation Mono\", Menlo, monospace;\n}\n\npre {\n  background: #0f172a;\n  color: #f8fafc;\n  padding: 18px;\n  border-radius: 10px;\n  overflow-x: auto;\n  font-size: 14px;\n  line-height: 1.6;\n}\n\npre code {\n  background: none;\n  padding: 0;\n  color: inherit;\n}\n\nblockquote {\n  border-left: 4px solid #2563eb;\n  padding-left: 16px;\n  color: #374151;\n  margin: 20px 0;\n}\n\ntable {\n  border-collapse: collapse;\n  width: 100%;\n  margin: 24px 0;\n}\n\nth, td {\n  border: 1px solid #e5e7eb;\n  padding: 10px;\n  text-align: left;\n  font-size: 14px;\n}\n\nth {\n  background: #f9fafb;\n}\n\nhr {\n  margin: 48px 0;\n  border: none;\n  border-top: 1px solid #e5e7eb;\n}\n\n.footer {\n  margin-top: 60px;\n  padding-top: 24px;\n  border-top: 1px solid #e5e7eb;\n  font-size: 14px;\n  color: #6b7280;\n}\n\n.footer strong {\n  color: #111827;\n}\n\n.footer a {\n  color: #2563eb;\n  text-decoration: none;\n}\n\n.footer a:hover {\n  text-decoration: underline;\n}\n\n.signature {\n  margin-top: 8px;\n  line-height: 1.6;\n}\n</style>\n</head>\n\n<body>\n\n<div class=\"wrapper\">\n\n  <!-- Title -->\n  <h1>{{ $('Code in JavaScript1').item.json.data.meta.title }}</h1>\n\n  <!-- Meta -->\n  <div class=\"meta\">\n    📅 {{ $('Code in JavaScript1').item.json.data.meta.date }}\n  </div>\n\n  <!-- Description -->\n  <div class=\"description\">\n    {{ $('Code in JavaScript1').item.json.data.meta.description }}\n  </div>\n\n  <!-- Tags -->\n  <div class=\"tags\">\n    <span class=\"tag\">{{ $('Code in JavaScript1').item.json.data.meta.tags[0] }}</span>\n    <span class=\"tag\">{{ $('Code in JavaScript1').item.json.data.meta.tags[1] }}</span>\n    <span class=\"tag\">{{ $('Code in JavaScript1').item.json.data.meta.tags[2] }}</span>\n    <span class=\"tag\">{{ $('Code in JavaScript1').item.json.data.meta.tags[3] }}</span>\n    <span class=\"tag\">{{ $('Code in JavaScript1').item.json.data.meta.tags[4] }}</span>\n    <span class=\"tag\">{{ $('Code in JavaScript1').item.json.data.meta.tags[5] }}</span>\n    <span class=\"tag\">{{ $('Code in JavaScript1').item.json.data.meta.tags[6] }}</span>\n  </div>\n\n  <!-- Blog Content (HTML) -->\n  {{ $json.data }}\n\n  <!-- Footer -->\n  <div class=\"footer\">\n    <div class=\"signature\">\n      <strong>Chinmay Ku Jena</strong><br>\n      Distributed Systems & Backend Engineering<br><br>\n      📱 <a href=\"https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect.\" target=\"_blank\">\n        Message on WhatsApp\n      </a><br>\n      📧 <a href=\"mailto:chinmay09jena@gmail.com\">\n        chinmay09jena@gmail.com\n      </a><br>\n    </div>\n  </div>\n\n</div>\n\n</body>\n</html>"
+      },
+      "type": "n8n-nodes-base.html",
+      "typeVersion": 1.2,
+      "position": [
+        1280,
+        1128
+      ],
+      "id": "ca5c9fed-ac75-4b2b-8547-ba09dee1f89e",
+      "name": "HTML"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "You are a senior backend systems architect responsible for editorial planning of a high-quality engineering blog.\n\nYour task is to generate a completely new and original deep technical blog topic.\n\nSTRICT SCOPE RULES\n\nThe topic must focus on ONE primary technical domain only.\n\nValid domains include:\n- PostgreSQL internals\n- Database replication or concurrency\n- NestJS architecture patterns\n- Node.js runtime internals\n- Distributed systems reliability\n- Message queues (Kafka, Redis streams, etc.)\n- Transaction processing\n- Production debugging\n- Memory management in backend systems\n\nDo NOT mix multiple unrelated domains in one topic.\nDo NOT combine AI with database unless AI is the core focus.\nDo NOT force cross-technology blending.\n\nDEPTH REQUIREMENTS\n\nThe topic must:\n- Start from core concept\n- Cover intermediate implementation patterns\n- Explore advanced production-level concerns\n- Include performance or scaling discussion\n- Address common real-world engineering mistakes\n\nAvoid beginner tutorials.\nAvoid generic titles.\nAvoid “Introduction to X”.\nAvoid broad umbrella topics.\n\nOUTPUT FORMAT (STRICT)\n\nReturn ONLY valid JSON.\nNo markdown.\nNo commentary.\nExactly one JSON object.\n\n{\n  \"meta\": {\n    \"title\": \"Specific and technical title\",\n    \"date\": \"YYYY-MM-DD\",\n    \"description\": \"1-2 sentence precise technical summary\",\n    \"tags\": [\"tag1\", \"tag2\"],\n    \"slug\": \"lowercase-hyphen-separated\"\n  },\n  \"topic_outline\": [\n    \"Core concept\",\n    \"Architecture pattern\",\n    \"Implementation deep dive\",\n    \"Performance/scaling analysis\",\n    \"Common failure mode\"\n  ]\n}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3,
+      "position": [
+        -96,
+        1056
+      ],
+      "id": "c67df186-121f-408f-b27c-88cd77a90d6f",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-oss-120b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        -24,
+        1280
+      ],
+      "id": "a02f0951-634c-40d8-b637-7e9cebdd5154",
+      "name": "Groq Chat Model1",
+      "credentials": {
+        "groqApi": {
+          "id": "qoiYBkCB3wBY5MQQ",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "return{ data:JSON.parse($input.first().json.output)};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        256,
+        1056
+      ],
+      "id": "c349bbca-6eb9-45a3-bbad-013b855981bb",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "// return{ data:JSON.parse($input.first().json.output)};\nconst raw = $input.first().json.output;\n\n// Remove markdown code fences if present\nconst cleaned = raw\n  .replace(/```json/g, \"\")\n  .replace(/```/g, \"\")\n  .trim();\n\nreturn {\n  data: JSON.parse(cleaned)\n};\n// // Strip markdown code fences if present\n// const response = $input.first().json.output;\n\n// let output = response.trim();\n// if (output.startsWith('```json')) {\n//   output = output.replace(/^```json\\n/, '').replace(/\\n```$/, '');\n// }\n// output = output.trim();\n// const parsed = JSON.parse(output);\n// return parsed"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        1056
+      ],
+      "id": "ca4dc31d-695a-44c6-bfdf-72131b03a93a",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "fromEmail": "chinmay.jena7878@gmail.com",
+        "toEmail": "chinmay.jena7878@gmail.com",
+        "subject": "={{ $json.title }} | {{ $json.date }}",
+        "html": "={{ $json.html }}\nRead in website : https://chinmaykujena.github.io/tech-blogs-by-chinmay/blog-{{ $today.year }}/{{ $json.date }}/{{ $json.slug }}.html",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1952,
+        864
+      ],
+      "id": "521d846d-5cbc-49f7-9763-aa7565bf99ac",
+      "name": "Send email",
+      "webhookId": "0e15365e-6b98-4e5b-9104-c5e26b2f709f",
+      "credentials": {
+        "smtp": {
+          "id": "ueMwECDD0oBOf5ys",
+          "name": "SMTP account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1504,
+        1056
+      ],
+      "id": "1a68ed86-38dd-4a8e-bb05-58b7c627b3a7",
+      "name": "Merge"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nconst htmlItem = items.find(i => i.json.html);\nconst dataItem = items.find(i => i.json.data);\n\nreturn [\n  {\n    json: {\n      html: htmlItem?.json.html,\n      title: dataItem?.json.data?.meta?.title,\n      slug:  dataItem?.json.data.meta.slug,\n      date: dataItem?.json.data?.meta?.date\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1728,
+        1056
+      ],
+      "id": "fb18ec40-dabc-4fff-a143-b775bd0c057e",
+      "name": "Code in JavaScript4"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        616,
+        1280
+      ],
+      "id": "99cba892-f315-4209-a4e0-c2daf8f5eced",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "DIGslPK3the8xTpB",
+          "name": "Kalpanix Personal"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 18,
+              "triggerAtMinute": 27
+            },
+            {
+              "triggerAtHour": 10,
+              "triggerAtMinute": 30
+            },
+            {
+              "triggerAtHour": 13
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -320,
+        1056
+      ],
+      "id": "c5c8ecfd-8844-4e31-b872-bd2ab1934456",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "fromEmail": "chinmay.jena@kalpanix.com",
+        "toEmail": "chinmay.jena@kalpanix.com",
+        "subject": "={{ $json.title }} | {{ $json.date }}",
+        "html": "={{ $json.html }} \nRead in website : https://chinmaykujena.github.io/tech-blogs-by-chinmay/blog-{{ $today.year }}/{{ $json.date }}/{{ $json.slug }}.html",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        1952,
+        1248
+      ],
+      "id": "2aed6f40-47fd-401b-99a5-aac7a7d6e7e9",
+      "name": "Send email Kalpanix Mail",
+      "webhookId": "0e15365e-6b98-4e5b-9104-c5e26b2f709f",
+      "credentials": {
+        "smtp": {
+          "id": "ueMwECDD0oBOf5ys",
+          "name": "SMTP account"
+        }
+      },
+      "disabled": true
+    },
+    {
+      "parameters": {
+        "resource": "file",
+        "owner": {
+          "__rl": true,
+          "value": "ChinmayKuJena",
+          "mode": "name"
+        },
+        "repository": {
+          "__rl": true,
+          "value": "tech-blogs-by-chinmay",
+          "mode": "list",
+          "cachedResultName": "tech-blogs-by-chinmay",
+          "cachedResultUrl": "https://github.com/ChinmayKuJena/tech-blogs-by-chinmay"
+        },
+        "filePath": "=blog-{{ $today.year }}/{{$json.date}}/{{ $json.slug }}.html",
+        "fileContent": "={{ $json.html }}",
+        "commitMessage": "added new "
+      },
+      "type": "n8n-nodes-base.github",
+      "typeVersion": 1.1,
+      "position": [
+        1952,
+        1056
+      ],
+      "id": "c5a794d8-9aa2-4c9d-9890-d0c6c15e35fe",
+      "name": "Create a file1",
+      "webhookId": "7598fbe5-a3ca-48aa-81ec-2f1cdb1c19c5",
+      "credentials": {
+        "githubApi": {
+          "id": "Jf3jrycua5YMFhS8",
+          "name": "GitHub account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Markdown": {
+      "main": [
+        [
+          {
+            "node": "HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTML": {
+      "main": [
+        [
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Markdown",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Merge",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript4": {
+      "main": [
+        [
+          {
+            "node": "Send email Kalpanix Mail",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create a file1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a file1": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "1ed8aedecda9cf4d97062d707e3b438c2eb5b3ab53b77fe8000fa2c85618dbe3"
+  }
+}
