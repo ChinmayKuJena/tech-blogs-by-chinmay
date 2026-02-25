@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Designing a Polyglot Backend with NestJS, PostgreSQL Logical Replication, and Real‑time LLM Inference</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-02-25
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    Explores how to combine NestJS services, PostgreSQL logical replication, and low‑latency LLM inference into a cohesive, observable backend, covering consistency models, performance engineering, and production‑grade npm dependency management.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">nestjs</span>
+    <span class="tag">postgresql</span>
+    <span class="tag">llm</span>
+    <span class="tag">distributed-systems</span>
+    <span class="tag">performance</span>
+    <span class="tag">npm</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>The modern AI‑augmented backend must juggle heterogeneous data stores, strict consistency guarantees, and sub‑second inference latency. NestJS offers a modular architecture that can orchestrate relational databases, vector search engines, and stateless inference services while keeping the codebase maintainable. PostgreSQL logical replication provides a reliable change‑data‑capture (CDC) pipeline that synchronizes state across services without sacrificing ACID properties. When paired with a lightweight LLM inference microservice, the stack can serve both transactional queries and semantic search in a single request path.</p>
+<p>This article walks through a production‑grade implementation that ties these pieces together. We discuss the consistency model enforced by logical replication, the async queue that decouples inference from request handling, and the performance knobs that keep latency predictable under load. Finally, we highlight a subtle but common source of runtime failures: drifting npm dependencies and mismatched model API contracts.</p>
+<h2 id="polyglotservicecomposition">Polyglot Service Composition</h2>
+<p>NestJS modules can encapsulate access to both a PostgreSQL instance and a vector store such as Milvus or PGVector. The following example shows a simplified <code>DataModule</code> that registers two providers: a TypeORM repository for relational entities and a client wrapper for vector operations.<br />
+    import { Module } from '@nestjs/common';<br />
+    import { TypeOrmModule } from '@nestjs/typeorm';<br />
+    import { Document } from './entities/document.entity';<br />
+    import { VectorClient } from './vector-client.service';</p>
+<pre><code>@Module({
+  imports: [TypeOrmModule.forFeature([Document])],
+  providers: [VectorClient],
+  exports: [VectorClient, TypeOrmModule],
+})
+export class DataModule {}
+</code></pre>
+<p>Service code can now persist a record and immediately index its embedding without coupling the two stores.<br />
+    @Injectable()<br />
+    export class DocumentService {<br />
+      constructor(<br />
+        @InjectRepository(Document) private repo: Repository<Document>,<br />
+        private vectorClient: VectorClient,<br />
+      ) {}</p>
+<pre><code>  async create(dto: CreateDocumentDto): Promise&lt;Document&gt; {
+    const doc = await this.repo.save(dto);
+    const embedding = await this.vectorClient.embed(dto.content);
+    await this.vectorClient.upsert(doc.id, embedding);
+    return doc;
+  }
+}
+</code></pre>
+<h2 id="consistencystrategywithlogicalreplication">Consistency Strategy with Logical Replication</h2>
+<p>PostgreSQL logical replication streams row‑level changes in WAL format. By creating a replication slot and a small CDC consumer, downstream services can react to inserts, updates, and deletes in near real time. The slot is defined once on the primary.<br />
+    SELECT * FROM pg<em>create</em>logical<em>replication</em>slot('nest_cdc', 'pgoutput');</p>
+<p>A lightweight Node.js worker connects via the <code>pg-logical-replication</code> library, parses the change set, and publishes events to a message broker (e.g., NATS). NestJS can subscribe to these events to keep the vector store in sync.<br />
+    import { Client } from 'pg';<br />
+    import { LogicalReplication } from 'pg-logical-replication';</p>
+<pre><code>const client = new Client({ connectionString: process.env.PG_URL });
+await client.connect();
+const repl = new LogicalReplication(client);
+const slot = repl.slot('nest_cdc');
+
+slot.on('data', async (msg) =&gt; {
+  const change = JSON.parse(msg.payload);
+  // Translate to vector store operation
+  await handleChange(change);
+});
+
+await slot.start();
+</code></pre>
+<p>Because the CDC stream respects transaction boundaries, the vector store sees a consistent view of the data. If a downstream consumer crashes, it can resume from the last LSN stored in a durable checkpoint table.</p>
+<h2 id="realtimellminferencemicroservice">Real‑time LLM Inference Microservice</h2>
+<p>Inference latency is unpredictable when models run on shared GPUs. To isolate this variability, we expose the LLM as a stateless HTTP microservice behind an async queue (BullMQ). The main API receives a request, enqueues a job, and returns a promise that resolves when the worker posts the result.<br />
+    // inference.controller.ts<br />
+    @Controller('inference')<br />
+    export class InferenceController {<br />
+      constructor(@InjectQueue('llm') private queue: Queue) {}</p>
+<pre><code>  @Post()
+  async infer(@Body() body: { prompt: string }) {
+    const job = await this.queue.add('run', { prompt: body.prompt }, { attempts: 3 });
+    const result = await job.waitUntilFinished(this.queue.events);
+    return { answer: result };
+  }
+}
+</code></pre>
+<p>The worker pulls jobs, runs the model (e.g., a quantized LLaMA on a TensorRT engine), and stores the output back in Redis for the awaiting request.<br />
+    // inference.processor.ts<br />
+    @Processor('llm')<br />
+    export class LlmProcessor {<br />
+      @Process('run')<br />
+      async handle(job: Job) {<br />
+        const { prompt } = job.data;<br />
+        const answer = await runModel(prompt); // hardware‑accelerated call<br />
+        return answer;<br />
+      }<br />
+    }</p>
+<p>By decoupling request handling from GPU execution, back‑pressure is naturally applied: the queue length caps concurrent inference, preventing OOM on the accelerator.</p>
+<h2 id="performancetuning">Performance Tuning</h2>
+<ul>
+<li><strong>Connection pooling</strong> – Use <code>pg-pool</code> with a max size tuned to the number of CPU cores and expected concurrent transactions. For vector queries, maintain a separate pool to avoid contention.</li>
+<li><strong>Back‑pressure</strong> – Configure BullMQ <code>limiter</code> to throttle job submissions when GPU utilization exceeds a threshold (e.g., 80%).</li>
+<li><strong>Vectorized query execution</strong> – Leverage PostgreSQL's <code>pgvector</code> extension to perform ANN search directly in SQL, reducing round‑trips to an external engine.<br />
+SELECT id, embedding <=> query_embedding AS distance<br />
+FROM documents<br />
+ORDER BY distance<br />
+LIMIT 10;</li>
+<li><strong>Hardware‑accelerated inference</strong> – Deploy the model with TensorRT or ONNX Runtime, enable FP8 quantization, and pin the process to a dedicated GPU using <code>CUDA_VISIBLE_DEVICES</code>.</li>
+<li><strong>Observability</strong> – Export Prometheus metrics from NestJS (<code>@nestjs/terminus</code>) and from the inference worker (job latency, GPU memory usage). Correlate them with PostgreSQL replication lag metrics to spot consistency bottlenecks.</li>
+</ul>
+<h2 id="commonpitfalls">Common Pitfalls</h2>
+<p>Neglecting npm version pinning leads to subtle runtime differences, especially when libraries change their default serialization of binary data. Always lock dependencies with an exact version (<code>npm ci</code> on a <code>package-lock.json</code>).</p>
+<p>Model API contracts also drift: a new model release may alter the shape of the response payload or the required token limit. Guard against this by versioning the inference endpoint (<code>/v1/inference</code>) and validating responses against a JSON schema before forwarding them to callers.</p>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>NestJS provides a clean boundary for orchestrating relational and vector stores while keeping business logic testable.</li>
+<li>PostgreSQL logical replication delivers reliable CDC without external tooling, preserving transactional guarantees.</li>
+<li>Stateless LLM inference behind an async queue isolates GPU variability and enables natural back‑pressure.</li>
+<li>Performance hinges on disciplined connection pooling, vectorized queries, and hardware‑accelerated model serving.</li>
+<li>Production stability requires strict npm version pinning and explicit versioning of model APIs to avoid contract drift.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
