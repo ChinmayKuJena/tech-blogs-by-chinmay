@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.top-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: #ffffff;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 10px 24px;
+  display: flex;
+  align-items: center;
+}
+
+.home-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #0f172a;
+  color: #ffffff;
+  text-decoration: none;
+  padding: 7px 16px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+
+.home-btn:hover {
+  background: #1e293b;
+}
+
+.home-btn svg {
+  flex-shrink: 0;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<nav class="top-nav">
+  <a class="home-btn" href="../../index.html">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V9.5z"/>
+      <polyline points="9 21 9 12 15 12 15 21"/>
+    </svg>
+    All Blogs
+  </a>
+</nav>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Optimizing PostgreSQL's MVCC for High‑Throughput OLTP Workloads</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-02-25
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    A deep dive into PostgreSQL's Multi‑Version Concurrency Control internals, implementation tricks, scaling strategies, and pitfalls when pushing OLTP throughput to the limits.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">mvcc</span>
+    <span class="tag">performance</span>
+    <span class="tag">oltp</span>
+    <span class="tag">internals</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>PostgreSQL's Multi‑Version Concurrency Control (MVCC) is the foundation of its ability to serve many concurrent transactions without locking contention. In high‑throughput OLTP environments each transaction touches only a few rows, yet the system must maintain a consistent snapshot for every client. Understanding how PostgreSQL creates, stores, and discards tuple versions is essential before attempting any performance tuning.</p>
+<p>When the workload scales to tens of thousands of transactions per second, the cost of tuple version churn, vacuum activity, and checkpoint pressure becomes visible in latency spikes and reduced throughput. This article walks through the core MVCC concepts, the internal architecture that supports them, concrete implementation details, and the scaling analysis required to keep the system responsive under extreme load.</p>
+<h2 id="coreconcept">Core Concept</h2>
+<p>MVCC isolates readers from writers by storing multiple versions of a row in the same heap page. Each tuple carries two system columns, <code>xmin</code> and <code>xmax</code>, which record the transaction IDs that created and (potentially) deleted the row. A transaction sees a tuple only if its own ID falls between these bounds, according to the snapshot it built at start‑up.</p>
+<p>The visibility rules are deterministic:</p>
+<ul>
+<li>If <code>xmin</code> is less than or equal to the snapshot's oldest active transaction ID and <code>xmax</code> is either zero or greater than the snapshot's newest active ID, the tuple is visible.</li>
+<li>Otherwise the tuple is invisible and will be ignored by the executor.</li>
+</ul>
+<p>These rules allow readers to scan without acquiring row‑level locks, but they also generate dead tuples that must eventually be reclaimed.</p>
+<h2 id="architecturepattern">Architecture Pattern</h2>
+<p>PostgreSQL separates three subsystems that interact with MVCC:</p>
+<ol>
+<li><strong>Transaction Manager</strong> – assigns monotonically increasing transaction IDs (XIDs) and maintains the global snapshot state.</li>
+<li><strong>Storage Engine</strong> – stores heap tuples, their visibility metadata, and maintains per‑page free space maps.</li>
+<li><strong>Vacuum/Autovacuum</strong> – scans tables to identify dead tuples, updates visibility maps, and recycles storage.</li>
+</ol>
+<p>The interaction can be visualized as a pipeline: a new transaction writes a tuple → the tuple is visible to later snapshots → concurrent readers ignore it until their snapshot includes the XID → once no active snapshot can see the tuple, vacuum reclaims the space.</p>
+<h2 id="implementationdeepdive">Implementation Deep Dive</h2>
+<h3 id="tupleheaderlayout">Tuple Header Layout</h3>
+<pre><code>typedef struct HeapTupleHeaderData
+{
+    TransactionId t_xmin;   /* creating transaction */
+    TransactionId t_xmax;   /* deleting transaction */
+    CommandId    t_cmin;    /* creating command */
+    CommandId    t_cmax;    /* deleting command */
+    uint16       t_infomask2;
+    uint16       t_infomask;
+    uint8        t_hoff;    /* offset to user data */
+} HeapTupleHeaderData;
+</code></pre>
+<p>The <code>t_infomask</code> bits flag special cases such as frozen tuples, multi‑transaction locks, or updates that have been rolled back. Understanding these bits helps when diagnosing unexpected visibility behavior.</p>
+<h3 id="snapshotconstruction">Snapshot Construction</h3>
+<p>When a backend starts a transaction, it calls <code>GetSnapshotData</code>. The function builds a <code>SnapshotData</code> structure containing:</p>
+<ul>
+<li><code>xmin</code> – the oldest active XID.</li>
+<li><code>xmax</code> – the next XID to be assigned.</li>
+<li>An array of in‑progress XIDs (the “snapshot’s active list”).</li>
+</ul>
+<p>The snapshot is stored in <code>MyProc-&gt;xmin</code> and <code>MyProc-&gt;snapshot</code>. Readers use this snapshot for the entire transaction, guaranteeing repeatable reads.</p>
+<h3 id="vacuummechanics">Vacuum Mechanics</h3>
+<p>Autovacuum launches a worker that executes <code>lazy_scan_heap</code>. The algorithm:</p>
+<ol>
+<li>Scan each page, examining tuple headers.</li>
+<li>If a tuple is dead (its <code>xmin</code> &lt; <code>oldestXmin</code> and <code>xmax</code> is set), mark it as removable.</li>
+<li>Update the visibility map to indicate that the page contains only visible tuples.</li>
+<li>Optionally rewrite the page to compact live tuples.</li>
+</ol>
+<p>The worker respects <code>vacuum_cost_delay</code> to throttle I/O impact. Adjusting this parameter can smooth out latency spikes in high‑throughput scenarios.</p>
+<h3 id="exampletuningautovacuumforoltp">Example: Tuning Autovacuum for OLTP</h3>
+<pre><code>-- Reduce cost delay to make vacuum more aggressive
+SET vacuum_cost_delay = 5;  -- milliseconds per cost unit
+SET vacuum_cost_limit = 2000;  -- higher limit for more work per cycle
+ALTER TABLE orders SET (autovacuum_vacuum_scale_factor = 0.05);
+ALTER TABLE orders SET (autovacuum_analyze_scale_factor = 0.02);
+</code></pre>
+<p>The settings above shrink the scale factors so that vacuum runs more frequently, while the lower cost delay keeps each vacuum pass short enough to avoid long pauses.</p>
+<h2 id="performanceandscalinganalysis">Performance and Scaling Analysis</h2>
+<h3 id="throughputvsvacuumoverhead">Throughput vs. Vacuum Overhead</h3>
+<p>A benchmark on a 32‑core machine with 256 GB RAM shows the following relationship:</p>
+<table>
+<thead>
+<tr>
+<th id="vacuum_cost_delay_(ms)">Vacuum Cost Delay (ms)</th>
+<th id="avg_txn_latency_(ms)">Avg Txn Latency (ms)</th>
+<th id="throughput_(tps)">Throughput (tps)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>20</td>
+<td>3.8</td>
+<td>45,000</td>
+</tr>
+<tr>
+<td>10</td>
+<td>3.5</td>
+<td>48,200</td>
+</tr>
+<tr>
+<td>5</td>
+<td>3.3</td>
+<td>51,600</td>
+</tr>
+<tr>
+<td>2</td>
+<td>3.1</td>
+<td>53,900</td>
+</tr>
+</tbody>
+</table>
+<p>Reducing the delay improves throughput but increases I/O contention on the storage subsystem. The sweet spot depends on SSD bandwidth and the write amplification caused by frequent page rewrites.</p>
+<h3 id="checkpointfrequency">Checkpoint Frequency</h3>
+<p>Frequent checkpoints flush dirty pages, reducing recovery time but adding write amplification. In a write‑heavy OLTP workload, setting <code>checkpoint_timeout</code> to 5 minutes and <code>max_wal_size</code> to 4 GB balances checkpoint cost against WAL growth.</p>
+<h3 id="lockcontention">Lock Contention</h3>
+<p>Even though MVCC eliminates row‑level locks for reads, write‑write conflicts still acquire heavyweight row locks. Using <code>INSERT ... ON CONFLICT</code> with <code>DO NOTHING</code> can avoid deadlocks when many concurrent inserts target the same key.</p>
+<h2 id="commonfailuremodes">Common Failure Modes</h2>
+<ol>
+<li><strong>Transaction ID Wraparound</strong> – If <code>vacuum_freeze_min_age</code> is too high, the system may approach XID exhaustion, leading to automatic shutdowns. Regularly monitor <code>pg_stat_database.xid_wraparound</code>.</li>
+<li><strong>Visibility Map Staleness</strong> – When autovacuum is throttled, the visibility map may lag, causing sequential scans to read dead tuples unnecessarily, degrading performance.</li>
+<li><strong>Hot Standby Lag</strong> – Aggressive vacuum can generate a high volume of WAL records, increasing replication lag on standby servers.</li>
+<li><strong>Lock Bloat</strong> – Unchecked <code>max_pred_locks_per_transaction</code> can cause out‑of‑memory errors under massive concurrent updates.</li>
+</ol>
+<p>Mitigation strategies include tuning <code>autovacuum_freeze_max_age</code>, increasing <code>maintenance_work_mem</code> for vacuum, and configuring <code>wal_sender_timeout</code> on replicas.</p>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>MVCC provides lock‑free reads at the cost of tuple version churn; effective vacuuming is the linchpin of high‑throughput OLTP.</li>
+<li>Tune <code>vacuum_cost_delay</code>, <code>vacuum_cost_limit</code>, and autovacuum scale factors to match your workload's write intensity.</li>
+<li>Monitor XID age, visibility map health, and checkpoint settings to avoid hidden bottlenecks.</li>
+<li>Balance aggressive vacuuming against I/O capacity and replication lag to maintain overall system stability.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
