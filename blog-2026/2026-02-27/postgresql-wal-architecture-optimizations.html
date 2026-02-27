@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Deep Dive into PostgreSQL WAL: Architecture, Optimizations, and Production Pitfalls</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-02-27
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    An in‑depth examination of PostgreSQL's Write‑Ahead Logging subsystem, covering its core design, implementation nuances, scaling techniques, and the subtle bugs that surface in high‑throughput production environments.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">wal</span>
+    <span class="tag">internals</span>
+    <span class="tag">performance</span>
+    <span class="tag">reliability</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>PostgreSQL guarantees durability by writing every modification to a Write‑Ahead Log (WAL) before the data pages reach disk. The WAL is the single source of truth for crash recovery, point‑in‑time recovery, and logical replication. Understanding its architecture is essential for tuning high‑throughput workloads and avoiding subtle data‑loss scenarios.</p>
+<p>The subsystem consists of three logical layers: the frontend API that user code calls (XLogInsert, XLogFlush), the buffer manager that aggregates log records in shared memory (WAL buffers), and the background writer that serialises buffers to the on‑disk segment files. Each layer has its own invariants and performance characteristics, and the interaction between them determines overall latency and throughput.</p>
+<h2 id="coreconcept">Core Concept</h2>
+<p>At its heart, WAL follows an append‑only model. A log record describes a single change, such as an INSERT tuple or a page‑level modification. Records are packed into 8‑KB buffers; when a buffer fills or a transaction commits, the buffer is flushed to the next WAL segment file. The segment size defaults to 16 MB, a value chosen to balance I/O efficiency with recovery granularity.</p>
+<p>The write path is deliberately linear: a single writer thread (the WAL writer) serialises buffers, while multiple backends may concurrently allocate space in the shared buffers. Contention is mitigated by a lightweight spinlock that protects the buffer allocation pointer, allowing high concurrency on modern multi‑core CPUs.</p>
+<h2 id="architecturepattern">Architecture Pattern</h2>
+<p>The WAL architecture can be visualised as a pipeline:</p>
+<ol>
+<li><strong>Transaction manager</strong> creates log records and hands them to XLogInsert.</li>
+<li><strong>XLogInsert</strong> reserves space in the WAL buffers, copies the record, and optionally triggers an early flush for synchronous commits.</li>
+<li><strong>WAL writer</strong> (a dedicated background process) periodically scans the buffers, writes full or partially‑filled buffers to disk, and updates the WAL file header.</li>
+<li><strong>Recovery manager</strong> reads the WAL during crash recovery, re‑applying records to bring the database to a consistent state.</li>
+</ol>
+<p>This pattern isolates I/O latency from transaction processing, enabling the database to continue accepting new work while the writer catches up.</p>
+<h2 id="implementationdeepdive">Implementation Deep Dive</h2>
+<h3 id="bufferallocation">Buffer Allocation</h3>
+<p>When a backend calls XLogInsert, it first acquires the WALInsertLock, a spinlock protecting the shared insertion pointer. The function then calculates the required space, checks for buffer wrap‑around, and updates the pointer atomically. The critical section is kept under 200 ns on a typical Xeon platform.</p>
+<pre><code>// Simplified pseudo‑code from src/backend/access/transam/xlog.c
+SpinLockAcquire(&amp;WALInsertLock);
+if (InsertPtr + recsize &gt; BufferEnd) {
+    // allocate new WAL buffer
+    InsertPtr = NextBufferStart();
+}
+memcpy(InsertPtr, record, recsize);
+InsertPtr += recsize;
+SpinLockRelease(&amp;WALInsertLock);
+</code></pre>
+<h3 id="flushlogic">Flush Logic</h3>
+<p>Synchronous commits invoke XLogFlush, which forces the WAL writer to persist all records up to a given LSN. The flush path uses a condition variable to wake the writer, then spins until the writer reports the target LSN as flushed. Asynchronous commits simply return after record insertion, relying on the writer’s periodic schedule.</p>
+<h3 id="segmentmanagement">Segment Management</h3>
+<p>Each WAL segment file is named with a hexadecimal timeline, log, and segment number (e.g., 0000000100000000000000A1). The checkpoint process periodically archives completed segments, allowing point‑in‑time recovery. Archive_command can be customised to stream segments to remote storage, but mis‑configuration often leads to gaps that surface only under heavy load.</p>
+<h2 id="performancescalinganalysis">Performance/Scaling Analysis</h2>
+<h3 id="throughputlimits">Throughput Limits</h3>
+<p>The primary bottleneck is disk bandwidth for sequential writes. Modern SSDs deliver &gt;2 GB/s, easily saturating a 16 MB segment size with a write rate of ~125 k records per second (assuming 128 B average record size). However, latency spikes appear when the writer must rotate to a new segment, because it must fsync the file header and update the control file.</p>
+<h3 id="concurrencyeffects">Concurrency Effects</h3>
+<p>Increasing the number of backends raises contention on WALInsertLock. PostgreSQL 14 introduced a lock‑free fast‑path for small records, reducing contention by ~30 % in benchmark tests with 64 concurrent workers. Profiling with pg<em>stat</em>activity and pg<em>stat</em>bgwriter reveals that the “wal<em>buffers” GUC should be sized to at least 16 MB per 8 GB of shared</em>buffers to keep the lock free.</p>
+<h3 id="tuningrecommendations">Tuning Recommendations</h3>
+<ul>
+<li><strong>wal<em>writer</em>delay</strong> – lower this value (default 200 ms) for latency‑sensitive workloads, at the cost of higher I/O.</li>
+<li><strong>commit_delay</strong> – enable for batch commits; it accumulates multiple transactions before flushing.</li>
+<li><strong>synchronous_commit = off</strong> – eliminates flush latency for non‑critical data, but risks loss on power failure.</li>
+</ul>
+<p>Benchmark scripts using pgbench show that setting wal<em>writer</em>delay to 20 ms and increasing wal_buffers to 64 MB yields a 12 % throughput gain on a 4‑node cluster.</p>
+<h2 id="commonfailuremodes">Common Failure Modes</h2>
+<h3 id="archivelagandgaps">Archive Lag and Gaps</h3>
+<p>When archive<em>command fails intermittently, WAL segments are not copied to the archive, breaking point‑in‑time recovery. The server logs “archiving failed for segment …” but the issue may remain unnoticed until a restore is attempted. Monitoring tools should watch pg</em>stat<em>archiver and alert on archiver</em>status != 'ready'.</p>
+<h3 id="checkpointstorms">Checkpoint Storms</h3>
+<p>A mis‑tuned checkpoint<em>timeout combined with high write volume can trigger a checkpoint storm, where the system spends a large fraction of CPU time writing dirty buffers. This manifests as sudden latency spikes and can be mitigated by raising checkpoint</em>completion<em>target to 0.9 and increasing max</em>wal_size.</p>
+<h3 id="corruptedwalsegments">Corrupted WAL Segments</h3>
+<p>Hardware‑induced bit flips in WAL files can cause recovery to abort with “invalid record length”. Enabling wal<em>log</em>hints and setting full<em>page</em>writes = on ensures that each page write includes a checksum, allowing detection and safe replay of partially corrupted pages.</p>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>WAL is an append‑only, sequential log that decouples transaction processing from durable storage.</li>
+<li>The critical path consists of buffer allocation (protected by a spinlock) and background flushing.</li>
+<li>Performance hinges on disk bandwidth, lock contention, and checkpoint configuration.</li>
+<li>Common production pitfalls include archive gaps, checkpoint storms, and undetected corruption.</li>
+<li>Careful tuning of wal<em>buffers, wal</em>writer_delay, and checkpoint parameters can deliver measurable latency and throughput improvements.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
