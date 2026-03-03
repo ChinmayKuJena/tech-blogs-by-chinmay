@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Logical Decoding Internals: Optimizing WAL Streaming and Replication Slot Management in PostgreSQL</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-03-03
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    A deep examination of PostgreSQL's logical decoding pipeline, replication slot lifecycle, and how to tune them for high‑throughput change data capture while avoiding common pitfalls.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">wal</span>
+    <span class="tag">logical-decoding</span>
+    <span class="tag">replication-slot</span>
+    <span class="tag">performance</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>Logical decoding provides a programmable view of the write‑ahead log (WAL) that can be consumed by external systems for change data capture (CDC).  The feature sits on top of PostgreSQL's core replication infrastructure, exposing each committed transaction as a series of logical change events.  Understanding how the decoder interacts with WAL, replication slots, and the streaming protocol is essential for building reliable, high‑throughput pipelines.</p>
+<p>This article walks through the internal architecture, the lifecycle of replication slots, practical plugin development tips, and the performance knobs that keep the system from choking under load.  It also highlights common misconfigurations that lead to slot bloat, WAL retention overflow, or even data loss.</p>
+<h2 id="logicaldecodingarchitectureandwalformatfundamentals">Logical Decoding Architecture and WAL Format Fundamentals</h2>
+<p>PostgreSQL writes every modification to the WAL before the data page is flushed.  Logical decoding does not emit raw WAL bytes; instead it parses the WAL records, reconstructs the transaction context, and forwards a logical representation to an output plugin.  The pipeline consists of three stages:</p>
+<ol>
+<li><strong>WAL Reader</strong> – a background worker that streams WAL pages from the pg_wal directory.</li>
+<li><strong>Decoder Core</strong> – transforms physical WAL records into logical change sets, handling transaction boundaries, sub‑transactions, and visibility rules.</li>
+<li><strong>Output Plugin</strong> – a user‑supplied module that formats the logical changes (e.g., JSON, Avro) and decides when to emit them.</li>
+</ol>
+<p>The logical decoding API relies on a snapshot that guarantees a consistent view of the database at the point the transaction started.  By default the decoder uses a <em>transaction snapshot</em> (the same one used for MVCC), but plugins can request a <em>logical snapshot</em> that includes all changes visible to the decoding session.</p>
+<h2 id="replicationslotlifecycleandconsumercoordinationpattern">Replication Slot Lifecycle and Consumer Coordination Pattern</h2>
+<p>A replication slot guarantees that the server retains WAL files until every consumer has processed them.  Slots are created with <code>pg_create_logical_replication_slot</code> and identified by a unique name.  The lifecycle follows a simple state machine:</p>
+<ul>
+<li><strong>Inactive</strong> – slot exists but no client is connected.  WAL retention is governed by <code>wal_keep_size</code> and <code>max_slot_wal_keep_size</code>.</li>
+<li><strong>Active</strong> – a client has called <code>START_REPLICATION</code> and is streaming changes.  The server tracks the LSN up to which the client has confirmed receipt.</li>
+<li><strong>Dropping</strong> – when <code>pg_drop_replication_slot</code> is issued, the slot is marked for removal; any active streaming connection must terminate first.</li>
+</ul>
+<p>A typical consumer pattern is:</p>
+<pre><code>SELECT * FROM pg_create_logical_replication_slot('my_slot', 'pgoutput');
+# Connect using libpq or a driver that supports logical replication
+START_REPLICATION SLOT my_slot LOGICAL &lt;start_lsn&gt;;
+# Process messages, periodically send feedback with the latest LSN
+SELECT pg_replication_origin_advance('my_slot', &lt;last_lsn&gt;);
+</code></pre>
+<p>The feedback messages are crucial: they tell the server how far the consumer has progressed, allowing it to recycle old WAL segments.</p>
+<h2 id="plugindevelopmentoutputpluginsandsnapshothandling">Plugin Development, Output Plugins, and Snapshot Handling</h2>
+<p>Output plugins are compiled as shared libraries and loaded by the server at slot creation time.  The API consists of a handful of callbacks:</p>
+<ul>
+<li><code>pg_output_plugin_init</code> – registers the plugin and its options.</li>
+<li><code>pg_output_startup</code> – receives the initial snapshot and replication start LSN.</li>
+<li><code>pg_output_begin_txn</code>, <code>pg_output_commit_txn</code> – delimit transaction boundaries.</li>
+<li><code>pg_output_change</code> – called for each row‑level change (INSERT/UPDATE/DELETE).</li>
+<li><code>pg_output_shutdown</code> – cleanup before the slot is dropped.</li>
+</ul>
+<p>A minimal plugin skeleton (indented as a code block) looks like this:</p>
+<pre><code>#include "postgres.h"
+#include "replication/logical.h"
+
+void _PG_output_plugin_init(OutputPluginCallbacks *cb)
+{
+    cb-&gt;startup_cb = pg_output_startup;
+    cb-&gt;begin_cb   = pg_output_begin_txn;
+    cb-&gt;change_cb  = pg_output_change;
+    cb-&gt;commit_cb  = pg_output_commit_txn;
+    cb-&gt;shutdown_cb = pg_output_shutdown;
+}
+
+static void pg_output_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt, bool is_init)
+{
+    opt-&gt;output_type = OUTPUT_PLUGIN_OUTPUT_LOGICAL;
+    /* Request a logical snapshot if needed */
+    ctx-&gt;snapshot = GetTransactionSnapshot();
+}
+
+static void pg_output_change(LogicalDecodingContext *ctx,
+                             ReorderBufferTXN *txn,
+                             Relation rel,
+                             ReorderBufferChange *change)
+{
+    /* Emit a simple JSON line */
+    StringInfoData buf;
+    initStringInfo(&amp;buf);
+    appendStringInfo(&amp;buf, "{\"table\":\"%s\",\"op\":\"%c\",\"data\":%s}\n",
+                     RelationGetRelationName(rel),
+                     change-&gt;action,
+                     row_to_json(change-&gt;data));
+    OutputPluginWrite(ctx, buf.data, buf.len);
+}
+</code></pre>
+<p>The snapshot handling strategy influences both latency and consistency.  A <em>static snapshot</em> (taken at slot creation) ensures repeatable reads but can cause long‑running slots to retain large WAL ranges.  A <em>dynamic snapshot</em> (requested per transaction) reduces retention but may miss intermediate changes if the consumer restarts.</p>
+<h2 id="throughputbottlenecksslotbloatandtuningparameters">Throughput Bottlenecks, Slot Bloat, and Tuning Parameters</h2>
+<p>When the decoder cannot keep up with the incoming WAL rate, the slot's LSN lags, and PostgreSQL is forced to keep WAL files longer.  This manifests as <em>slot bloat</em> and can exhaust disk space.  The primary knobs to control this behavior are:</p>
+<ul>
+<li><code>max_replication_slots</code> – total number of slots the server will allow.</li>
+<li><code>max_wal_size</code> / <code>min_wal_size</code> – bounds for automatic WAL recycling.</li>
+<li><code>wal_keep_size</code> – explicit amount of WAL to retain for standby or slot consumers.</li>
+<li><code>wal_sender_timeout</code> – how long the server waits for feedback before assuming the client is dead.</li>
+<li><code>max_slot_wal_keep_size</code> – per‑slot limit for retained WAL.</li>
+</ul>
+<p>Typical tuning steps:</p>
+<ol>
+<li><strong>Measure baseline throughput</strong> – monitor <code>pg_stat_replication</code> and <code>pg_stat_wal_receiver</code> for <code>sent_lsn</code>, <code>write_lsn</code>, and <code>flush_lsn</code>.</li>
+<li><strong>Increase <code>max_slot_wal_keep_size</code></strong> if the consumer processes bursts slower than the write rate.</li>
+<li><strong>Adjust <code>wal_sender_timeout</code></strong> to a lower value (e.g., 30s) to force slot cleanup when a client disappears.</li>
+<li><strong>Enable <code>wal_compression</code></strong> to reduce disk I/O for retained segments.</li>
+</ol>
+<p>Example configuration snippet (indented code block):</p>
+<pre><code># postgresql.conf
+max_replication_slots = 10
+max_wal_size = 4GB
+min_wal_size = 1GB
+wal_keep_size = 512MB
+max_slot_wal_keep_size = 2GB
+wal_sender_timeout = 30s
+wal_compression = on
+</code></pre>
+<p>Performance analysis should focus on two metrics: <em>lag LSN</em> (difference between <code>pg_current_wal_lsn()</code> and the slot's <code>restart_lsn</code>) and <em>disk usage growth rate</em>.  A sustained lag above a few hundred megabytes usually indicates a bottleneck in the consumer's processing pipeline (e.g., synchronous network writes, heavy JSON serialization, or back‑pressure from downstream systems).</p>
+<h2 id="slotstarvationwalretentionoverflowanddatalossscenarios">Slot Starvation, WAL Retention Overflow, and Data Loss Scenarios</h2>
+<p>Misconfiguration can lead to three dangerous states:</p>
+<ul>
+<li><strong>Slot starvation</strong> – when the server discards WAL before the slot catches up, the consumer receives a <code>REPLICATION_ERROR</code> and must restart from a new snapshot, potentially missing changes.</li>
+<li><strong>WAL retention overflow</strong> – if <code>max_slot_wal_keep_size</code> is too high and the disk cannot accommodate the retained segments, PostgreSQL may abort writes, causing a cluster halt.</li>
+<li><strong>Data loss</strong> – disabling <code>wal_keep_size</code> or setting <code>wal_sender_timeout</code> too aggressively can cause the slot to be considered inactive, leading to premature WAL recycling.</li>
+</ul>
+<p>Mitigation strategies include:</p>
+<ul>
+<li>Regularly monitor <code>pg_replication_slots</code> for <code>restart_lsn</code> drift.</li>
+<li>Set alerts on disk usage thresholds.</li>
+<li>Deploy a secondary consumer or a hot standby that can take over a stalled slot.</li>
+<li>Use <code>pg_replication_origin_advance</code> to acknowledge progress only after durable storage of the change.</li>
+</ul>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>Logical decoding separates WAL parsing from output formatting, giving fine‑grained control over CDC pipelines.</li>
+<li>Replication slots guarantee WAL retention but must be actively managed; feedback LSNs are the lifeline.</li>
+<li>Plugin developers should keep snapshot scopes minimal to avoid unnecessary WAL buildup.</li>
+<li>Tuning <code>max_slot_wal_keep_size</code>, <code>wal_keep_size</code>, and <code>wal_sender_timeout</code> balances latency against disk consumption.</li>
+<li>Continuous monitoring of slot lag and disk growth prevents starvation and data‑loss scenarios.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
