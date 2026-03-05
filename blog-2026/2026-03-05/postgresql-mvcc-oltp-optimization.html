@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Deep Dive into PostgreSQL MVCC: Optimizing High‑Throughput OLTP Pipelines</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-03-05
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    An in‑depth exploration of PostgreSQL's Multi‑Version Concurrency Control, from its core mechanics to advanced tuning for massive OLTP workloads, highlighting performance trade‑offs and common production pitfalls.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">mvcc</span>
+    <span class="tag">oltp</span>
+    <span class="tag">performance</span>
+    <span class="tag">internals</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>PostgreSQL’s Multi‑Version Concurrency Control (MVCC) is the cornerstone of its ability to serve thousands of concurrent transactions with minimal lock contention. By keeping historical versions of rows, the engine can present each transaction with a consistent snapshot while writers continue to modify data. Understanding the exact mechanics—tuple versioning, transaction identifiers (XIDs), and snapshot visibility—is essential when you push PostgreSQL into high‑throughput OLTP pipelines where latency and throughput are measured in microseconds.</p>
+<p>This article walks through the internals of MVCC, shows how PostgreSQL stores and cleans up tuple versions, and provides concrete tuning guidance for workloads that generate millions of transactions per second. We also expose common production pitfalls such as transaction‑ID wraparound, table bloat, and isolation‑level mis‑configurations, and we back the discussion with benchmark snippets that illustrate the cost of each design choice.</p>
+<h2 id="mvccfundamentals">MVCC Fundamentals</h2>
+<p>PostgreSQL assigns a 32‑bit transaction ID (XID) to every transaction at its first write. Each row version, or <em>tuple</em>, stores the XID that created it (<code>xmin</code>) and, if it has been updated or deleted, the XID that invalidated it (<code>xmax</code>). A snapshot taken at the start of a transaction records the highest XID seen (<code>xmax</code>) and a list of in‑progress XIDs (<code>in_progress</code>). Visibility rules are:</p>
+<ul>
+<li>A tuple is visible if <code>xmin</code> ≤ snapshot.xmax and <code>xmin</code> is not in <code>in_progress</code>.</li>
+<li>A tuple is invisible if <code>xmax</code> ≤ snapshot.xmax and <code>xmax</code> is not in <code>in_progress</code>.</li>
+<li>If <code>xmin</code> or <code>xmax</code> is still in <code>in_progress</code>, the tuple is considered <em>in‑flight</em> and the engine must wait for the corresponding transaction to finish.</li>
+</ul>
+<p>Because XIDs are finite, PostgreSQL periodically freezes old tuples, replacing their <code>xmin</code> with a special frozen value. This prevents wraparound, which would otherwise corrupt visibility calculations.</p>
+<h2 id="postgresqlstoragearchitectureformvcc">PostgreSQL Storage Architecture for MVCC</h2>
+<p>The heap file stores the raw tuples. Adjacent to the heap, the <em>visibility map</em> tracks pages that contain only frozen tuples, allowing the vacuum process to skip them. Write‑ahead logging (WAL) records every change to the heap and visibility map, ensuring crash‑recovery can reconstruct the exact MVCC state.</p>
+<p>When a row is updated, PostgreSQL may create a new tuple version in the same page (HOT update) if the updated columns do not affect indexed columns. This avoids index churn and reduces WAL volume because the index entry still points to the original tuple location.</p>
+<pre><code>CREATE TABLE orders (
+    id BIGSERIAL PRIMARY KEY,
+    status TEXT NOT NULL,
+    amount NUMERIC(12,2) NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- HOT‑compatible update (status unchanged, only amount changes)
+UPDATE orders SET amount = amount + 10 WHERE id = 42;
+</code></pre>
+<p>If the update modifies an indexed column, PostgreSQL must insert a new index entry, which forces a <em>non‑HOT</em> update and generates additional WAL records.</p>
+<h2 id="efficienthotupdatesvacuumstrategiesandcustomisolationlevels">Efficient HOT Updates, Vacuum Strategies, and Custom Isolation Levels</h2>
+<h3 id="hotupdates">HOT Updates</h3>
+<p>To maximize HOT usage:</p>
+<ol>
+<li>Keep frequently updated columns out of indexes.</li>
+<li>Cluster tables on primary keys that are rarely updated.</li>
+<li>Set <code>fillfactor</code> to leave free space on each page (e.g., <code>ALTER TABLE orders SET (fillfactor = 80);</code>).</li>
+</ol>
+<h3 id="vacuum">Vacuum</h3>
+<p>Vacuum reclaims space occupied by dead tuples and updates the visibility map. Two vacuum modes exist:</p>
+<ul>
+<li><strong>Autovacuum</strong> – background workers that run based on <code>autovacuum_vacuum_scale_factor</code> and <code>autovacuum_analyze_scale_factor</code>.</li>
+<li><strong>Manual vacuum</strong> – invoked with <code>VACUUM (FULL, FREEZE, VERBOSE)</code>. Use sparingly in production because it locks tables.</li>
+</ul>
+<p>A typical high‑throughput service should tune the following parameters:</p>
+<pre><code>ALTER SYSTEM SET autovacuum_max_workers = 8;
+ALTER SYSTEM SET autovacuum_naptime = '10s';
+ALTER SYSTEM SET autovacuum_vacuum_cost_delay = 20ms;
+ALTER SYSTEM SET autovacuum_vacuum_cost_limit = 2000;
+</code></pre>
+<h3 id="isolationlevels">Isolation Levels</h3>
+<p>PostgreSQL supports <code>READ COMMITTED</code> (default) and <code>REPEATABLE READ</code>/<code>SERIALIZABLE</code>. For OLTP pipelines that require low latency, <code>READ COMMITTED</code> is usually optimal because it avoids holding long‑lived snapshots. However, if your business logic depends on strict repeatability, you must accept the extra MVCC overhead and potential serialization failures.</p>
+<h2 id="benchmarkingmvccoverheadandtuningparameters">Benchmarking MVCC Overhead and Tuning Parameters</h2>
+<p>A simple pgbench script can illustrate the cost of tuple versioning. The following benchmark runs two workloads: a pure read‑only transaction and a mixed read/write transaction that generates HOT updates.</p>
+<pre><code>pgbench -c 64 -j 8 -T 60 -f ./read_only.sql mydb
+pgbench -c 64 -j 8 -T 60 -f ./mixed.sql mydb
+</code></pre>
+<p>Key metrics to capture:</p>
+<ul>
+<li><strong>tps</strong> – transactions per second.</li>
+<li><strong>latency</strong> – average response time.</li>
+<li><strong>wal_bytes</strong> – WAL generated per second.</li>
+</ul>
+<p>Typical findings:</p>
+<ul>
+<li>Enabling <code>max_pred_locks_per_transaction</code> reduces predicate‑locking overhead in <code>SERIALIZABLE</code> workloads. Set it to a higher value (e.g., 256) when you expect many concurrent predicate locks.</li>
+<li><code>vacuum_cost_delay</code> and <code>vacuum_cost_limit</code> balance vacuum aggressiveness against query latency. A lower delay speeds up space reclamation but can increase I/O contention.</li>
+<li>Parallel workers (<code>max_parallel_workers_per_gather</code>) help read‑only scans but have little effect on write‑heavy HOT paths because each worker still contends for the same heap pages.</li>
+</ul>
+<h2 id="typicalproductionpitfalls">Typical Production Pitfalls</h2>
+<ol>
+<li><p><strong>Transaction ID Wraparound</strong> – If <code>vacuum_freeze_min_age</code> and <code>vacuum_freeze_table_age</code> are left at defaults, a busy system can approach the 2^31 XID limit, triggering an emergency autovacuum that blocks writes. Proactively lower these thresholds in high‑throughput clusters.</p></li>
+<li><p><strong>Table Bloat</strong> – Insufficient vacuum frequency leaves dead tuples on disk, inflating table size and cache pressure. Monitor <code>pg_stat_user_tables</code> columns <code>n_dead_tup</code> and <code>pg_total_relation_size</code> to detect bloat early.</p></li>
+<li><p><strong>Phantom Reads</strong> – Mis‑configured isolation (e.g., using <code>READ COMMITTED</code> when a repeatable snapshot is required) can cause logical anomalies in multi‑step business processes. Switch to <code>REPEATABLE READ</code> for those critical sections, handling possible serialization failures.</p></li>
+<li><p><strong>Index Bloat from Non‑HOT Updates</strong> – Updating indexed columns frequently forces new index entries, causing index pages to fragment. Periodic <code>REINDEX</code> or <code>pg_repack</code> can mitigate the growth.</p></li>
+</ol>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>MVCC relies on tuple versioning; understanding <code>xmin</code>, <code>xmax</code>, and snapshots is fundamental to any performance tuning.</li>
+<li>HOT updates, proper fillfactor, and avoiding indexed column churn dramatically reduce WAL and index maintenance.</li>
+<li>Autovacuum tuning (<code>max_workers</code>, <code>cost_delay</code>, <code>cost_limit</code>) is as critical as query optimization for OLTP scalability.</li>
+<li>Watch for XID wraparound and table bloat; proactive vacuum policies prevent catastrophic downtime.</li>
+<li>Choose isolation levels deliberately—<code>READ COMMITTED</code> for speed, <code>REPEATABLE READ</code>/<code>SERIALIZABLE</code> for correctness, accepting the associated MVCC cost.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
