@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Deep Dive into PostgreSQL MVCC: Vacuum Mechanics, Performance Tuning, and Pitfalls</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-03-06
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    An in‑depth exploration of PostgreSQL's Multi‑Version Concurrency Control, how vacuuming works under the hood, scaling considerations, and the subtle bugs engineers often encounter in production.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">mvcc</span>
+    <span class="tag">vacuum</span>
+    <span class="tag">performance</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>PostgreSQL implements Multi‑Version Concurrency Control (MVCC) to allow readers to see a consistent snapshot of the database while writers are making progress. Each row version, called a tuple, carries transaction identifiers (xmin and xmax) that define its visibility window. When a transaction modifies a row, the original tuple is left untouched and a new version is inserted, preserving the old state for concurrent readers.</p>
+<p>Because tuples are never overwritten in place, dead rows accumulate. The VACUUM process reclaims storage occupied by tuples that are no longer visible to any active transaction. Without regular vacuuming, table bloat grows, index size inflates, and transaction‑ID wraparound can corrupt data. This article walks through the core MVCC model, the internal architecture that supports it, the mechanics of VACUUM, performance considerations at scale, and the pitfalls that surface in production environments.</p>
+<p>The discussion is organized into five sections that mirror the outline: core concept, architecture pattern, implementation deep dive, performance/scaling analysis, and common failure modes. Code snippets use indented blocks to stay compatible with the no‑backticks rule.</p>
+<h2 id="coreconceptofmvcc">Core Concept of MVCC</h2>
+<p>MVCC relies on a simple rule set:</p>
+<ul>
+<li>A tuple is visible to a transaction if the transaction's snapshot sees the tuple's xmin and does not see its xmax.</li>
+<li>xmin stores the ID of the transaction that created the tuple; xmax stores the ID of the transaction that deleted or updated it.</li>
+<li>A tuple whose xmax is zero is considered still live.</li>
+<li>Visibility is evaluated against the snapshot taken at the start of each statement (or transaction, depending on isolation level).</li>
+</ul>
+<p>These rules allow readers to operate without blocking writers and vice‑versa, at the cost of retaining multiple tuple versions until they become obsolete.</p>
+<h2 id="architecturepatternstoragelayoutandtransactionids">Architecture Pattern: Storage Layout and Transaction IDs</h2>
+<p>PostgreSQL stores data in 8 KB pages. Each tuple header contains:</p>
+<pre><code>- xmin (4 bytes)
+- xmax (4 bytes)
+- other flags (t_infomask, t_infomask2)
+- tuple length and data
+</code></pre>
+<p>Two auxiliary structures help vacuuming:</p>
+<ul>
+<li><strong>Visibility Map (VM)</strong> – a bitmap that records pages where all tuples are known to be visible to all transactions. Vacuum can skip pages with a clean VM entry.</li>
+<li><strong>Free Space Map (FSM)</strong> – tracks free space on each page, allowing the planner to locate pages for new inserts efficiently.</li>
+</ul>
+<p>Transaction IDs (XIDs) are 32‑bit counters that wrap around after ~4 billion transactions. PostgreSQL uses a “freeze” mechanism to replace old XIDs with a special frozen value, preventing wraparound errors.</p>
+<h2 id="implementationdeepdivevacuumprocess">Implementation Deep Dive: VACUUM Process</h2>
+<p>VACUUM proceeds in several phases:</p>
+<ol>
+<li><strong>Heap Scan</strong> – The engine walks each page, examining tuple headers. If a tuple’s xmax is older than the oldest active transaction, it is marked dead.</li>
+<li><strong>Tuple Removal</strong> – Dead tuples are reclaimed; their space is added to the page’s free space list.</li>
+<li><strong>Visibility Map Update</strong> – Pages that become all‑visible are marked in the VM, allowing future scans to skip them.</li>
+<li><strong>Index Cleanup</strong> – Index entries that point to removed tuples are deleted. This step can be costly for large indexes.</li>
+<li><strong>Freezing</strong> – Tuples whose xmin is older than <code>vacuum_freeze_min_age</code> are frozen to the special frozen XID. Multixact IDs are similarly frozen.</li>
+</ol>
+<p>An example of invoking vacuum with verbose output and an immediate statistics update:</p>
+<pre><code>VACUUM (VERBOSE, ANALYZE) my_table;
+</code></pre>
+<p>The <code>lazy_vacuum</code> routine implements the above steps. It respects <code>vacuum_cost_delay</code> and <code>vacuum_cost_limit</code> to throttle I/O impact. The routine also updates <code>pg_stat_user_tables</code> counters, which are useful for monitoring.</p>
+<h2 id="performancescalinganalysis">Performance/Scaling Analysis</h2>
+<h3 id="autovacuumconfiguration">Autovacuum Configuration</h3>
+<p>Autovacuum runs in the background, triggered when the number of dead tuples exceeds a threshold. The relevant settings include:</p>
+<pre><code>autovacuum_vacuum_threshold = 50
+autovacuum_vacuum_scale_factor = 0.2
+autovacuum_vacuum_cost_delay = 20ms
+autovacuum_vacuum_cost_limit = 2000
+</code></pre>
+<p>These parameters balance vacuum aggressiveness against overall system throughput. A low <code>cost_delay</code> makes vacuum more aggressive but can increase latency for foreground queries.</p>
+<h3 id="ioandcpuimpact">I/O and CPU Impact</h3>
+<p>Vacuum reads every page of a table, but pages flagged as all‑visible in the VM are skipped. Large tables with high churn generate many dead tuples, causing frequent page reads and index updates. Parallel vacuum (available from PostgreSQL 13) can split the work across workers, reducing wall‑clock time at the expense of higher CPU usage.</p>
+<h3 id="multixactconsiderations">Multixact Considerations</h3>
+<p>Multixact IDs protect row‑level locks. Exhaustion of multixact IDs leads to errors like <code>multixact members limit exceeded</code>. Regular vacuum with <code>autovacuum_multixact_freeze_max_age</code> prevents this condition. Monitoring <code>pg_stat_database</code> columns <code>datmultixactmembers</code> and <code>datmultixactids</code> helps spot approaching limits.</p>
+<h2 id="commonfailuremodesandpitfalls">Common Failure Modes and Pitfalls</h2>
+<ul>
+<li><p><strong>Transaction‑ID Wraparound</strong> – If <code>vacuum_freeze_table_age</code> is not reached before the XID counter wraps, the database will refuse new writes. The remedy is to run a manual <code>VACUUM FREEZE</code> on affected tables.</p></li>
+<li><p><strong>Long‑Running Transactions</strong> – Open transactions keep old snapshots alive, preventing vacuum from reclaiming space. Tools like <code>pg_stat_activity</code> can identify sessions with unusually old <code>xact_start</code> timestamps.</p></li>
+<li><p><strong>Index Bloat</strong> – Even after tuple removal, index pages may retain dead entries. <code>REINDEX</code> or <code>VACUUM (FULL, VERBOSE)</code> can compact indexes, but both operations lock the table.</p></li>
+<li><p><strong>Improper Autovacuum Settings</strong> – Overly aggressive thresholds cause vacuum to thrash I/O, while lax settings lead to bloat. Tuning requires observing <code>pg_stat_user_tables</code> columns <code>n_dead_tup</code> and <code>last_vacuum</code>.</p></li>
+<li><p><strong>Multixact Exhaustion</strong> – Failure to vacuum multixact‑heavy tables results in <code>multixact members limit exceeded</code>. Setting <code>autovacuum_multixact_freeze_max_age</code> lower than the default (400 million) mitigates risk.</p></li>
+</ul>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>MVCC provides non‑blocking reads by retaining multiple tuple versions; vacuum reclaims the space.</li>
+<li>The visibility map and free space map are essential for efficient vacuum skipping and insert placement.</li>
+<li>Autovacuum parameters must be tuned to the write‑read pattern of each workload.</li>
+<li>Transaction‑ID and multixact wraparound are hard limits; proactive freezing avoids catastrophic failures.</li>
+<li>Regular monitoring of <code>pg_stat_user_tables</code> and <code>pg_stat_database</code> is the first line of defense against bloat and ID exhaustion.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
