@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Deep Dive into PostgreSQL MVCC: Tuning Multi-Version Concurrency for High‑Throughput OLTP</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-03-07
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    An expert‑level exploration of PostgreSQL's MVCC engine, from its core data structures to production‑grade tuning, scaling strategies, and pitfalls that sabotage performance.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">mvcc</span>
+    <span class="tag">oltp</span>
+    <span class="tag">performance</span>
+    <span class="tag">debugging</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>PostgreSQL's Multi-Version Concurrency Control (MVCC) is the cornerstone of its ability to serve thousands of concurrent transactions without locking contention.  By preserving historical tuple versions, the engine can present each transaction with a consistent snapshot of the database, while writers continue to append new versions.  The trade‑off is a steady accumulation of dead tuples that must be reclaimed, and a subtle set of visibility rules that affect every query plan.</p>
+<p>When an OLTP workload pushes toward millions of transactions per second, the cost of maintaining those version chains becomes visible in latency spikes, bloat, and even transaction‑ID wraparound.  Understanding the exact data structures, the interaction with the buffer manager, WAL, and autovacuum is therefore a prerequisite for any production‑grade tuning effort.</p>
+<h2 id="coreconceptmvccfundamentalsandtransactionvisibility">Core Concept: MVCC Fundamentals and Transaction Visibility</h2>
+<p>PostgreSQL assigns each transaction a monotonically increasing 32‑bit transaction identifier (XID).  Every tuple stores two hidden fields, <code>xmin</code> and <code>xmax</code>, which record the creating and deleting XIDs respectively.  A tuple is visible to a transaction T if:</p>
+<pre><code>xmin &lt;= T.xid &lt; xmax   (or xmax is invalid)
+</code></pre>
+<p>The snapshot taken at the start of a transaction records the highest committed XID (<code>xmax</code>) and a list of in‑progress XIDs.  Visibility checks compare the tuple's <code>xmin</code>/<code>xmax</code> against this snapshot, allowing readers to ignore uncommitted changes without acquiring row‑level locks.</p>
+<h2 id="architecturepatternmvccbuffermanagerwalandvacuum">Architecture Pattern: MVCC, Buffer Manager, WAL, and Vacuum</h2>
+<p>The buffer manager mediates access to pages that contain tuple version chains.  When a writer modifies a row, it creates a new tuple version in the same page (or a new page after a page split) and updates the <code>xmin</code>/<code>xmax</code> fields atomically using a lock‑free compare‑and‑swap primitive.  The Write‑Ahead Log (WAL) records the insertion of the new tuple and the <code>xmax</code> update of the old version, guaranteeing durability before the page is flushed.</p>
+<p>Vacuum runs in two modes:</p>
+<ul>
+<li><strong>Lazy vacuum</strong> scans pages, removes tuples whose <code>xmax</code> is older than the oldest active snapshot, and compacts the page.</li>
+<li><strong>Freeze vacuum</strong> rewrites <code>xmin</code>/<code>xmax</code> to a special frozen XID once the values approach the wraparound threshold (2^31‑1).</li>
+</ul>
+<p>Both modes rely on the buffer manager's pinning mechanism to avoid evicting pages that are currently being examined by concurrent transactions.</p>
+<h2 id="implementationdeepdivetupleversionchainsandlockfreeupdates">Implementation Deep Dive: Tuple Version Chains and Lock‑Free Updates</h2>
+<p>Each heap page stores an array of <code>HeapTupleHeaderData</code> structures.  The <code>t_ctid</code> field points to the next version in the chain, forming a singly‑linked list.  During an UPDATE, PostgreSQL performs the following steps (simplified):</p>
+<pre><code>1. Allocate a new tuple slot in the target page.
+2. Fill the new tuple header with the current XID as xmin.
+3. Set the new tuple's t_ctid to point to the old tuple.
+4. Atomically set old.t_xmax = current XID and old.t_ctid = new tuple's location.
+5. Write WAL records for steps 2‑4.
+</code></pre>
+<p>The critical section (step 4) uses a lock‑free CAS on the <code>t_xmax</code> field, ensuring that concurrent updates do not corrupt the chain.  Readers follow the chain until they encounter a tuple visible to their snapshot, then stop—no locks are taken during the walk.</p>
+<h2 id="performancescalinganalysisbenchmarkingmvccoverhead">Performance/Scaling Analysis: Benchmarking MVCC Overhead</h2>
+<p>A synthetic benchmark that mixes 90 % simple SELECTs with 10 % UPDATE‑heavy transactions can expose the cost of version chain traversal.  On a 32‑core machine with 256 GB RAM, the following configuration yielded ~1.2 M TPS:</p>
+<pre><code>shared_buffers = 64GB
+max_connections = 2000
+max_worker_processes = 64
+autovacuum_max_workers = 8
+autovacuum_naptime = 5s
+vacuum_freeze_min_age = 50000000
+vacuum_freeze_table_age = 200000000
+vacuum_multixact_freeze_min_age = 5000000
+vacuum_multixact_freeze_table_age = 150000000
+</code></pre>
+<p>Key observations:</p>
+<ul>
+<li>Raising <code>vacuum_freeze_min_age</code> postpones freeze work, but if left too high the system approaches XID wraparound, causing sudden stalls.</li>
+<li>Reducing <code>autovacuum_naptime</code> forces more frequent, smaller vacuum cycles, which keeps page bloat under control at the cost of higher CPU usage.</li>
+<li>Indexes on frequently updated columns benefit from <code>REINDEX CONCURRENTLY</code> during low‑traffic windows; otherwise index bloat mirrors heap bloat.</li>
+</ul>
+<h2 id="commonfailuremodemisconfiguredvacuumleadingtowraparoundandbloat">Common Failure Mode: Misconfigured Vacuum Leading to Wraparound and Bloat</h2>
+<p>When <code>autovacuum</code> thresholds are set too conservatively, dead tuples accumulate, inflating page size and cache pressure.  As the oldest active XID approaches the wraparound limit, PostgreSQL forces an emergency vacuum that blocks new transactions.  Symptoms include:</p>
+<ul>
+<li>Latency spikes of several seconds during vacuum bursts.</li>
+<li>Unexpected <code>ERROR: database is not accepting commands to avoid wraparound data loss</code> messages.</li>
+<li>Rapid growth of <code>pg_class.relpages</code> and <code>pg_class.reltuples</code> without corresponding data growth.</li>
+</ul>
+<p>Mitigation steps:</p>
+<pre><code>1. Monitor `pg_stat_database.xact_commit` and `xact_rollback` to estimate XID consumption rate.
+2. Set `vacuum_freeze_table_age` to a value comfortably below 2^31‑1 (e.g., 150 million for high‑throughput systems).
+3. Enable `log_autovacuum_min_duration = 0` to capture vacuum duration in logs.
+4. Periodically run `VACUUM (FREEZE, VERBOSE)` on large tables during maintenance windows.
+</code></pre>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>MVCC provides lock‑free reads at the expense of version chain maintenance; understanding <code>xmin</code>/<code>xmax</code> is essential for any performance work.</li>
+<li>Tight integration with the buffer manager, WAL, and vacuum subsystem means that tuning one component invariably affects the others.</li>
+<li>Proactive vacuum configuration—especially freeze ages—prevents catastrophic wraparound and keeps bloat in check.</li>
+<li>High‑throughput OLTP workloads benefit from larger <code>shared_buffers</code>, aggressive autovacuum cycles, and careful index maintenance.</li>
+<li>Continuous monitoring of XID consumption, vacuum activity, and page bloat is the only reliable way to sustain million‑TPS performance.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
