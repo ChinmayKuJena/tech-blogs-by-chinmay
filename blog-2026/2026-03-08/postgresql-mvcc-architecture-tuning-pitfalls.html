@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Deep Dive into PostgreSQL MVCC: Architecture, Tuning, and Pitfalls for High‑Throughput OLTP</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-03-08
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    An expert‑level exploration of PostgreSQL's Multi‑Version Concurrency Control, covering its internal structures, implementation nuances, scaling strategies, and the most common production failures.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">mvcc</span>
+    <span class="tag">performance</span>
+    <span class="tag">vacuum</span>
+    <span class="tag">oltp</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>PostgreSQL achieves high concurrency without locking readers by employing Multi‑Version Concurrency Control (MVCC). Every row version, or tuple, carries transaction identifiers that indicate when it became visible and when it was superseded. Readers see a consistent snapshot of the database as of the start of their transaction, while writers create new tuple versions without blocking existing readers. This design underpins PostgreSQL's reputation for robust OLTP performance, but it also introduces complexity in storage management, vacuuming, and transaction ID wrap‑around handling.</p>
+<p>The article explores the low‑level structures that make MVCC possible, examines how they interact with the buffer manager and WAL, and provides concrete guidance for tuning a high‑throughput OLTP workload. It also highlights the most common production failures—such as transaction ID exhaustion and vacuum starvation—and offers mitigation strategies.</p>
+<h2 id="coreconcept">Core Concept</h2>
+<p>At the heart of MVCC are two 32‑bit fields stored in each heap tuple header: "xmin" and "xmax". "xmin" records the transaction ID that created the tuple, while "xmax" records the ID of the transaction that deleted or updated it. A tuple is visible to a transaction T if T's snapshot sees "xmin" as committed and either "xmax" is either not set or represents a transaction that started after T.</p>
+<p>PostgreSQL also maintains a visibility map (VM) and a transaction status log (pg<em>clog). The VM tracks pages that contain only tuples visible to all active transactions, allowing the vacuum process to skip them. The pg</em>clog records the commit/abort state of each transaction ID, enabling fast visibility checks without scanning the entire WAL.</p>
+<h2 id="architecturepattern">Architecture Pattern</h2>
+<p>The storage engine layers the MVCC metadata on top of the standard heap file format. Each data page contains a line pointer array followed by the actual tuple data. The tuple header includes:</p>
+<pre><code>4 bytes   t_xmin (creator transaction ID)
+4 bytes   t_xmax (deleter transaction ID or freeze marker)
+2 bytes   t_infomask (visibility flags)
+2 bytes   t_infomask2 (additional flags)
+4 bytes   t_hoff (offset to user data)
+</code></pre>
+<p>Indexes store only the primary key values and a reference to the heap tuple's CTID (page number and line pointer). Because indexes do not store MVCC information, they rely on the heap tuple's visibility checks during index scans.</p>
+<p>The vacuum process works in two phases: a "lazy" scan that marks dead tuples for reuse and a "freeze" phase that rewrites transaction IDs older than a configurable horizon. The freeze horizon prevents transaction ID wrap‑around, which would otherwise corrupt visibility decisions.</p>
+<h2 id="implementationdeepdive">Implementation Deep Dive</h2>
+<p>PostgreSQL's source file src/backend/access/heap/heapam.c contains the core visibility logic. The function HeapTupleSatisfiesVisibility evaluates a tuple against a snapshot. A simplified excerpt (indented as a code block) illustrates the decision tree:</p>
+<pre><code>if (HeapTupleHeaderGetXmin(tuple) &gt; snapshot-&gt;xmin)
+    return false;   // tuple created after snapshot
+if (HeapTupleHeaderGetXmax(tuple) != InvalidTransactionId)
+{
+    if (HeapTupleHeaderGetXmax(tuple) &lt;= snapshot-&gt;xmin)
+        return false;   // tuple deleted before snapshot
+    if (HeapTupleHeaderGetXmax(tuple) == snapshot-&gt;xmax)
+        return false;   // tuple deleted by a concurrent transaction
+}
+return true;   // tuple is visible
+</code></pre>
+<p>HOT (Heap Only Tuple) updates allow PostgreSQL to store a new version of a row on the same page without updating indexes. The HOT chain is linked via the t_ctid field, and the visibility logic walks the chain until it finds a visible version.</p>
+<p>The following example shows how to force a HOT update in SQL:</p>
+<pre><code>UPDATE orders SET status = 'shipped' WHERE order_id = 12345;
+</code></pre>
+<p>If the updated columns are not part of any index, PostgreSQL will create a HOT tuple, reducing index churn and improving cache locality.</p>
+<h2 id="performanceandscalinganalysis">Performance and Scaling Analysis</h2>
+<h3 id="vacuumoverhead">Vacuum Overhead</h3>
+<p>Vacuum consumes CPU, I/O, and lock resources. Autovacuum parameters (autovacuum<em>vacuum</em>scale<em>factor, autovacuum</em>vacuum_threshold) must be tuned to match the write intensity of the workload. For a system inserting 10,000 rows per second, a lower scale factor (e.g., 0.05) and a modest threshold (e.g., 50) keep table bloat in check without overwhelming the I/O subsystem.</p>
+<h3 id="transactionidconsumption">Transaction ID Consumption</h3>
+<p>Each transaction consumes a 32‑bit ID. At a rate of 5,000 transactions per second, wrap‑around would occur in roughly 250 days. The freeze<em>max</em>age setting (default 200 million) determines when autovacuum triggers a freeze. In high‑throughput environments, reducing freeze<em>max</em>age to 100 million and increasing autovacuum<em>freeze</em>max_age can prevent sudden wrap‑around failures.</p>
+<h3 id="indexbloat">Index Bloat</h3>
+<p>Because indexes never store MVCC flags, they can retain pointers to dead tuples indefinitely. Regular REINDEX or pg<em>repack operations reclaim space. Monitoring pg</em>stat<em>user</em>indexes for idx<em>scan vs. idx</em>tup_read ratios helps identify bloated indexes.</p>
+<h3 id="concurrencycontention">Concurrency Contention</h3>
+<p>The heavyweight lock on a table's pg_class row is only taken for DDL, but row‑level locks are still required for updates. Reducing lock duration by batching updates and using SELECT … FOR UPDATE SKIP LOCKED can improve throughput under contention.</p>
+<h2 id="commonfailuremodes">Common Failure Modes</h2>
+<ol>
+<li><strong>Transaction ID Wrap‑Around</strong> – If autovacuum cannot keep up, the system will refuse new transactions once the wrap‑around threshold is reached. Symptoms include "database is not accepting commands to avoid wraparound data loss" errors.</li>
+<li><strong>Vacuum Starvation</strong> – Long‑running transactions prevent vacuum from marking tuples as dead. Detect such transactions via pg<em>stat</em>activity and consider setting a max<em>statement</em>age.</li>
+<li><strong>Heap Bloat</strong> – Excessive dead tuples cause page scans to become I/O bound. Regularly monitor pg<em>stat</em>user<em>tables.dead</em>tuple_percent and schedule aggressive vacuum cycles.</li>
+<li><strong>Index Bloat</strong> – Stale index entries increase index scan cost. Use pg<em>stat</em>user<em>indexes.idx</em>tup_dead to trigger REINDEX.</li>
+<li><strong>HOT Chain Breakage</strong> – If a HOT chain exceeds the maximum length (default 100), PostgreSQL falls back to a regular update, causing unnecessary index writes.</li>
+</ol>
+<p>Mitigation strategies involve proactive monitoring, adjusting autovacuum thresholds, and employing connection poolers that enforce transaction timeouts.</p>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>MVCC relies on per‑tuple transaction IDs (xmin/xmax) and a global transaction status log to provide snapshot isolation without reader locks.</li>
+<li>The visibility map and lazy vacuum together reclaim space and prevent transaction ID wrap‑around.</li>
+<li>HOT updates reduce index churn; they are triggered automatically when only non‑indexed columns change.</li>
+<li>Autovacuum tuning (scale factor, thresholds, freeze ages) is critical for high‑throughput OLTP workloads.</li>
+<li>Regularly monitor transaction ID age, dead tuple percentages, and index bloat to avoid catastrophic failures.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
