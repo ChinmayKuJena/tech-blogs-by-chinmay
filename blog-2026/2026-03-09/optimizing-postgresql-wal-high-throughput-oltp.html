@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Optimizing PostgreSQL's Write-Ahead Logging for High‑Throughput OLTP Workloads</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-03-09
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    A deep dive into PostgreSQL's WAL architecture, tuning strategies, and production‑grade safeguards to sustain extreme transaction rates while preserving durability.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">wal</span>
+    <span class="tag">performance</span>
+    <span class="tag">oltp</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>PostgreSQL’s Write‑Ahead Logging (WAL) is the cornerstone of durability and crash recovery. Every change to a data page is first recorded in the WAL before the page itself is flushed to disk. This ordering guarantees that, after a power loss, the system can replay the log and restore a consistent state. In high‑throughput OLTP environments the WAL path becomes a performance bottleneck; the challenge is to keep the log flowing fast enough to match the transaction rate while still honoring durability guarantees.</p>
+<p>The following sections dissect the WAL architecture, present proven tuning knobs, and outline production‑grade safeguards. The goal is to enable sustained transaction rates in the millions per second range without sacrificing data integrity.</p>
+<h2 id="fundamentalsofwriteaheadlogging">Fundamentals of Write‑Ahead Logging</h2>
+<p>WAL operates on a simple principle: <strong>write‑ahead, then apply</strong>. When a transaction modifies a row, PostgreSQL writes a logical record to an in‑memory WAL buffer. The buffer is flushed to a WAL segment file on disk by the <em>wal_writer</em> process. On recovery, the <em>walreceiver</em> (in streaming replication) or the recovery engine reads those segments and replays the changes.</p>
+<p>Key properties:</p>
+<ul>
+<li><strong>Durability</strong> – A transaction is considered committed only after its WAL record is safely on durable storage (fsync). The data pages may still be dirty.</li>
+<li><strong>Crash safety</strong> – The redo log contains enough information to reconstruct any page state, even if the page files were partially written.</li>
+<li><strong>Sequential I/O</strong> – WAL writes are append‑only, allowing the storage subsystem to optimize for large sequential writes.</li>
+</ul>
+<h2 id="architecturepatternbufferscheckpointsandbackgroundprocesses">Architecture Pattern: Buffers, Checkpoints, and Background Processes</h2>
+<p>The WAL pipeline consists of several cooperating background workers:</p>
+<ul>
+<li><strong>wal_writer</strong> – Periodically flushes the WAL buffers to the current WAL segment. Its interval is controlled by <code>wal_writer_delay</code> (default 200 ms).</li>
+<li><strong>wal<em>receiver</strong> – In a replica, streams WAL data from the primary and writes it to the standby’s pg</em>wal directory.</li>
+<li><strong>background_writer</strong> – Writes dirty shared buffers to data files, reducing the amount of work a checkpoint must perform.</li>
+<li><strong>checkpointer</strong> – Triggers checkpoints at intervals defined by <code>checkpoint_timeout</code> and <code>max_wal_size</code>. A checkpoint forces all dirty buffers to be flushed and records a checkpoint record in the WAL.</li>
+</ul>
+<p>The interaction can be visualized as a pipeline: transaction → WAL buffer → wal_writer → WAL segment → checkpoint → data files. Proper sizing of buffers and checkpoint intervals prevents back‑pressure from spilling over into transaction latency.</p>
+<h2 id="implementationdeepdivetuningparameters">Implementation Deep Dive: Tuning Parameters</h2>
+<table>
+<thead>
+<tr>
+<th id="parameter">Parameter</th>
+<th id="purpose">Purpose</th>
+<th id="typical_oltp_setting">Typical OLTP setting</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>wal_level</code></td>
+<td>Amount of information written to WAL.</td>
+<td><code>replica</code> (or <code>logical</code> if logical decoding is needed)</td>
+</tr>
+<tr>
+<td><code>wal_buffers</code></td>
+<td>Size of the shared memory buffer for WAL data.</td>
+<td>64 MB – 256 MB, depending on write intensity</td>
+</tr>
+<tr>
+<td><code>commit_delay</code></td>
+<td>Microseconds to wait before flushing WAL after a commit.</td>
+<td>0 (disable) for low latency</td>
+</tr>
+<tr>
+<td><code>wal_compression</code></td>
+<td>Compresses WAL records before writing.</td>
+<td><code>on</code> when storage bandwidth is limited, but CPU is abundant</td>
+</tr>
+<tr>
+<td><code>checkpoint_timeout</code></td>
+<td>Maximum time between checkpoints.</td>
+<td>5 min – 15 min for high‑throughput workloads</td>
+</tr>
+<tr>
+<td><code>max_wal_size</code> / <code>min_wal_size</code></td>
+<td>Target WAL size before a checkpoint is forced.</td>
+<td><code>max_wal_size = 8GB</code>, <code>min_wal_size = 1GB</code></td>
+</tr>
+<tr>
+<td><code>wal_writer_delay</code></td>
+<td>Sleep time for wal_writer between flushes.</td>
+<td>50 ms for aggressive flushing</td>
+</tr>
+<tr>
+<td><code>synchronous_commit</code></td>
+<td>When the server reports a commit as complete.</td>
+<td><code>off</code> for maximum throughput, <code>on</code> for strict durability</td>
+</tr>
+</tbody>
+</table>
+<p>Example <code>postgresql.conf</code> snippet (indented code block without backticks):</p>
+<pre><code># postgresql.conf excerpt for high‑throughput OLTP
+wal_level = replica
+wal_buffers = 128MB
+commit_delay = 0
+wal_compression = on
+checkpoint_timeout = 10min
+max_wal_size = 8GB
+min_wal_size = 1GB
+wal_writer_delay = 50ms
+synchronous_commit = on
+</code></pre>
+<h3 id="walsegmentmanagement">WAL Segment Management</h3>
+<p>PostgreSQL creates 16 MB WAL segment files by default. Under heavy load the system may pre‑allocate many segments, causing rapid consumption of disk space. Setting <code>wal_keep_segments</code> (or <code>wal_keep_size</code> in newer versions) prevents premature removal of needed segments for replicas. Monitoring <code>pg_stat_archiver</code> and <code>pg_xlogfile_name_offset()</code> helps detect segment wrap‑around risk.</p>
+<h2 id="performanceandscalinganalysis">Performance and Scaling Analysis</h2>
+<h3 id="measuringlatencyandthroughput">Measuring Latency and Throughput</h3>
+<ul>
+<li>Use <code>pgbench</code> with a custom script that performs a mix of inserts, updates, and selects.</li>
+<li>Record <code>pg_stat_bgwriter</code> counters before and after the run to capture checkpoint activity.</li>
+<li>Track WAL write latency with <code>SELECT * FROM pg_stat_wal;</code> (or <code>pg_stat_archiver</code>).</li>
+</ul>
+<p>Typical findings:</p>
+<ul>
+<li>Reducing <code>wal_writer_delay</code> from 200 ms to 50 ms cuts commit latency by ~0.3 ms per transaction at the cost of higher I/O.</li>
+<li>Enabling <code>wal_compression</code> saves up to 30 % of WAL bandwidth on SSDs with modest CPU overhead.</li>
+<li>Parallel WAL (available in PostgreSQL 15+) spreads writes across multiple disk spindles or NVMe namespaces, increasing throughput roughly linearly with the number of WAL writers.</li>
+</ul>
+<h3 id="storagesubsystemchoices">Storage Subsystem Choices</h3>
+<table>
+<thead>
+<tr>
+<th id="storage">Storage</th>
+<th id="wal_write_latency_(median)">WAL Write Latency (median)</th>
+<th id="throughput_(tps)">Throughput (tps)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SATA SSD</td>
+<td>0.8 ms</td>
+<td>150k</td>
+</tr>
+<tr>
+<td>NVMe SSD</td>
+<td>0.3 ms</td>
+<td>350k</td>
+</tr>
+<tr>
+<td>RAID‑10 HDD</td>
+<td>2.5 ms</td>
+<td>70k</td>
+</tr>
+</tbody>
+</table>
+<p>Investing in low‑latency NVMe dramatically improves both latency and maximum TPS. When NVMe is unavailable, increasing <code>wal_buffers</code> and reducing checkpoint frequency mitigates the higher latency.</p>
+<h3 id="checkpointintervaloptimization">Checkpoint Interval Optimization</h3>
+<p>Frequent checkpoints keep the recovery window short but increase I/O spikes. A common strategy is to set <code>checkpoint_timeout</code> to a value that balances the average checkpoint duration (<code>checkpoint_completion_target</code> defaults to 0.9) against the acceptable recovery time. For a 8 GB WAL target, a 10‑minute interval yields checkpoint durations of ~2 seconds on modern NVMe, which is acceptable for most OLTP services.</p>
+<h2 id="commonfailuremodesandmitigationstrategies">Common Failure Modes and Mitigation Strategies</h2>
+<h3 id="checkpointstorms">Checkpoint Storms</h3>
+<p>When many back‑ends issue <code>CHECKPOINT</code> simultaneously (e.g., after a configuration reload), the I/O subsystem can become saturated. Mitigation:</p>
+<ul>
+<li>Use <code>checkpoint_completion_target</code> to spread the work over a larger fraction of the checkpoint interval.</li>
+<li>Enable <code>bgwriter_lru_maxpages</code> to allow the background writer to flush more pages proactively.</li>
+</ul>
+<h3 id="walsegmentwraparound">WAL Segment Wrap‑Around</h3>
+<p>If <code>wal_keep_segments</code> is too low and replication lag is high, the primary may recycle segments still needed by a standby, causing replication failure. Monitor <code>pg_replication_slots</code> and set <code>wal_keep_size</code> to a value that covers the maximum replication lag.</p>
+<h3 id="misconfiguredfsync">Misconfigured <code>fsync</code></h3>
+<p>Disabling <code>fsync</code> or setting <code>synchronous_commit = off</code> eliminates durability guarantees. In production, always keep <code>fsync = on</code> and evaluate the impact of <code>synchronous_commit</code> on a per‑application basis.</p>
+<h3 id="walcorruptiondetection">WAL Corruption Detection</h3>
+<ul>
+<li>Periodically run <code>pg_checksums</code> (PostgreSQL 13+) to verify data page integrity.</li>
+<li>Use <code>pg_waldump</code> to inspect recent WAL records for anomalies.</li>
+<li>Enable <code>archive_mode = on</code> and ship WAL files to a secure off‑site location; corrupted primary WAL can be restored from a known‑good archive.</li>
+</ul>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>WAL is the linchpin of durability; its performance hinges on sequential I/O, buffer sizing, and checkpoint strategy.</li>
+<li>Tune <code>wal_buffers</code>, <code>wal_writer_delay</code>, and checkpoint parameters to match the storage subsystem’s capabilities.</li>
+<li>Enable compression and parallel WAL only when CPU headroom is available.</li>
+<li>Monitor checkpoint duration, WAL segment usage, and replication lag to pre‑empt storms and wrap‑around.</li>
+<li>Preserve <code>fsync</code> and <code>synchronous_commit</code> settings appropriate to the required durability level; use archival backups to guard against corruption.</li>
+</ul>
+<p>By applying these principles, a PostgreSQL deployment can sustain extreme OLTP transaction rates while maintaining the strong durability guarantees that the WAL architecture provides.</p>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
