@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Optimizing PostgreSQL MVCC: Deep Dive into VACUUM, HOT Updates, and Checkpoint Coordination</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-03-09
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    An in‑depth exploration of PostgreSQL's MVCC engine, focusing on how VACUUM, HOT updates, and checkpoint interaction can be tuned for high‑throughput workloads.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">mvcc</span>
+    <span class="tag">vacuum</span>
+    <span class="tag">performance</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>PostgreSQL implements Multi-Version Concurrency Control (MVCC) by storing a separate tuple version for each transaction that modifies a row.  This design eliminates read‑write blocking but introduces hidden storage costs: dead tuples, visibility maps, and transaction ID (XID) consumption.  Understanding how these pieces interact is essential for workloads that generate millions of updates per hour.</p>
+<p>The storage layout consists of a heap file, a visibility map (VM), and a free space map (FSM).  Each tuple header carries xmin, xmax, and a hint bit that indicates whether the tuple is visible to a given snapshot.  When a row is updated, PostgreSQL may create a new tuple in the same page (a HOT update) or allocate a fresh page.  The decision hinges on whether the updated columns are indexed and whether the target page has enough free space.  HOT updates reduce index churn and keep related versions physically close, which in turn eases vacuuming and checkpointing.</p>
+<h2 id="postgresqlmvccarchitecture">PostgreSQL MVCC Architecture</h2>
+<p>The MVCC engine relies on three coordinated subsystems:</p>
+<ul>
+<li>Heap storage holds the actual row versions.</li>
+<li>The visibility map tracks pages that contain only tuples visible to all active transactions; such pages can be skipped by vacuum.</li>
+<li>The checkpoint subsystem writes dirty buffers to disk and forces a WAL flush, establishing a recovery baseline.</li>
+</ul>
+<p>These components are linked by the XID counter.  As XIDs advance, older tuples become candidates for removal, and the system must periodically freeze them to avoid wraparound.</p>
+<h2 id="hotupdatesandvisibilitymapinteraction">HOT Updates and Visibility Map Interaction</h2>
+<p>A HOT (Heap‑Only Tuple) update occurs when the modified columns are not indexed.  PostgreSQL inserts the new version on the same page, links it via t_ctid, and updates the VM bit for that page.  The VM bit signals that the page contains only tuples visible to all transactions, allowing vacuum to skip it entirely.</p>
+<pre><code>-- Example: a HOT‑friendly UPDATE
+UPDATE orders SET status = 'shipped' WHERE order_id = 12345;
+</code></pre>
+<p>If the update touches an indexed column, PostgreSQL must create a new index entry, which forces a non‑HOT update and may cause page splits.  Frequent non‑HOT updates increase bloat and pressure the FSM, leading to more frequent autovacuum cycles.</p>
+<h2 id="vacuuminternalslazyvsaggressive">VACUUM Internals: Lazy vs Aggressive</h2>
+<p>VACUUM operates in two modes:</p>
+<ul>
+<li><strong>Lazy vacuum</strong> scans the heap, removes dead tuples, and updates the VM.  It respects the <code>vacuum_cost_delay</code> settings to limit I/O impact.</li>
+<li><strong>Aggressive vacuum</strong> (triggered by <code>VACUUM (FULL)</code> or <code>VACUUM FREEZE</code>) rewrites the entire table, reclaiming space and freezing XIDs in one pass.</li>
+</ul>
+<p>During lazy vacuum, PostgreSQL records the highest XID it has seen (<code>relfrozenxid</code>).  When this value approaches the wraparound threshold, the system forces a freeze to prevent data loss.</p>
+<pre><code>-- Sample configuration for aggressive freezing
+ALTER TABLE large_table SET (autovacuum_freeze_max_age = 200000000);
+</code></pre>
+<p>The <code>autovacuum</code> daemon runs per‑table workers based on <code>autovacuum_vacuum_scale_factor</code> and <code>autovacuum_analyze_scale_factor</code>.  Tuning these parameters balances background I/O against the risk of bloat.</p>
+<h2 id="autovacuumtuningandcustomfreezestrategies">Autovacuum Tuning and Custom Freeze Strategies</h2>
+<p>High‑throughput workloads often require a more aggressive freeze policy than the defaults.  A typical tuning set includes:</p>
+<p>text</p>
+<h1 id="disabledefaultthresholds">Disable default thresholds</h1>
+<p>autovacuum<em>vacuum</em>threshold = 50<br />
+autovacuum<em>analyze</em>threshold = 50</p>
+<h1 id="scalefactorstunedforlargetables">Scale factors tuned for large tables</h1>
+<p>autovacuum<em>vacuum</em>scale<em>factor = 0.02
+autovacuum</em>analyze<em>scale</em>factor = 0.01</p>
+<h1 id="reducefreezeagetotriggerearlierfreezes">Reduce freeze age to trigger earlier freezes</h1>
+<p>autovacuum<em>freeze</em>max<em>age = 150000000
+vacuum</em>freeze<em>min</em>age = 50000000<br />
+vacuum<em>freeze</em>table_age = 100000000</p>
+<p>(Use an indented block instead of backticks to comply with the no‑fence rule.)</p>
+<p>Custom freeze can also be scheduled during low‑traffic windows using <code>VACUUM (FREEZE, VERBOSE)</code> on critical tables.  Monitoring <code>pg_stat_user_tables</code> for <code>n_dead_tup</code> and <code>last_vacuum</code> timestamps helps identify tables that lag behind.</p>
+<h2 id="checkpointcoordinationandthrottling">Checkpoint Coordination and Throttling</h2>
+<p>Checkpoints write all dirty buffers to disk and record a WAL checkpoint record.  The checkpoint interval (<code>checkpoint_timeout</code>) and the target size (<code>max_wal_size</code>) dictate how often this occurs.  Excessive checkpoint frequency amplifies I/O and can stall autovacuum because both compete for the same I/O bandwidth.</p>
+<p>PostgreSQL 13+ introduces checkpoint throttling via <code>checkpoint_completion_target</code>.  Setting this value closer to 0.9 spreads the checkpoint work over a longer period, reducing I/O spikes.</p>
+<pre><code>-- Example checkpoint tuning
+checkpoint_timeout = 15min
+max_wal_size = 4GB
+checkpoint_completion_target = 0.9
+</code></pre>
+<p>When autovacuum runs concurrently with a checkpoint, the system may experience “checkpoint stalls” where the checkpoint cannot finish because vacuum holds buffers pinned.  Adjusting <code>vacuum_cost_delay</code> and <code>vacuum_cost_limit</code> can alleviate this contention.</p>
+<h2 id="performancemeasurementandbenchmarking">Performance Measurement and Benchmarking</h2>
+<p>To quantify the impact of MVCC tuning, measure three key metrics:</p>
+<ol>
+<li><strong>Bloat ratio</strong> – <code>pgstattuple</code> reports live vs dead tuple percentages.</li>
+<li><strong>I/O latency</strong> – <code>pg_stat_bgwriter</code> and <code>iostat</code> reveal checkpoint‑related write latency.</li>
+<li><strong>Transaction throughput</strong> – <code>pgbench</code> or a custom write‑heavy workload can expose latency spikes.</li>
+</ol>
+<p>A typical benchmark script runs a mixed workload of inserts, updates (both HOT‑friendly and non‑HOT), and selects while varying <code>autovacuum_cost_delay</code> and <code>checkpoint_completion_target</code>.  Plotting latency against bloat percentage highlights the sweet spot where vacuum overhead is minimal yet wraparound risk stays low.</p>
+<h2 id="commonfailuremodesandmitigation">Common Failure Modes and Mitigation</h2>
+<p>The most frequent issue is a mis‑tuned autovacuum that allows XID wraparound.  Symptoms include:</p>
+<ul>
+<li>Errors like <code>database is not accepting commands to avoid wraparound data loss</code>.</li>
+<li>Sudden spikes in checkpoint duration as the system attempts an emergency vacuum.</li>
+<li>Table bloat exceeding 30 % of allocated space.</li>
+</ul>
+<p>Mitigation steps:</p>
+<ul>
+<li>Immediately run <code>VACUUM (FREEZE)</code> on the affected tables.</li>
+<li>Lower <code>autovacuum_freeze_max_age</code> and increase <code>autovacuum_vacuum_scale_factor</code>.</li>
+<li>Enable <code>log_autovacuum_min_duration</code> to capture slow vacuum runs.</li>
+<li>Consider partitioning large tables to isolate hot partitions and apply more aggressive vacuum settings there.</li>
+</ul>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>MVCC provides concurrency at the cost of hidden storage overhead; HOT updates and the visibility map are the primary tools to limit that overhead.</li>
+<li>Lazy vacuum is the workhorse for routine cleanup, but aggressive freezing is essential to prevent XID wraparound in write‑heavy environments.</li>
+<li>Autovacuum parameters must be tuned per workload; default values are safe for OLTP but often too lax for bulk‑load or streaming ingestion scenarios.</li>
+<li>Checkpoint coordination, especially throttling via <code>checkpoint_completion_target</code>, smooths I/O and reduces contention with vacuum.</li>
+<li>Continuous monitoring of bloat, XID age, and checkpoint latency is the only reliable way to keep a high‑throughput PostgreSQL cluster healthy.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
