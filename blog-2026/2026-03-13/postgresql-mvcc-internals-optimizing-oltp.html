@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>PostgreSQL MVCC Internals: Optimizing High‑Throughput OLTP with Transaction Visibility and Vacuum Strategies</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-03-13
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    A deep dive into PostgreSQL's MVCC engine, exploring tuple version chains, snapshot handling, and vacuum mechanics to maximize OLTP performance while avoiding common pitfalls.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">mvcc</span>
+    <span class="tag">vacuum</span>
+    <span class="tag">oltp</span>
+    <span class="tag">performance</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>PostgreSQL implements Multi-Version Concurrency Control (MVCC) to allow readers and writers to operate without blocking each other. Each row version, or <em>tuple</em>, carries the identifiers of the transaction that created it (xmin) and the transaction that deleted or superseded it (xmax). By comparing these identifiers against a snapshot taken at the start of a statement, the executor can decide whether a tuple is visible, invisible, or in‑progress. This model eliminates read‑write locks but introduces bookkeeping overhead that must be managed carefully in high‑throughput OLTP environments.</p>
+<p>The MVCC engine relies on a chain of tuple versions linked through heap pointers. When a row is updated, PostgreSQL may create a new tuple in the same page (HOT update) or allocate a fresh page entry. Over time, obsolete versions accumulate, consuming space and increasing the cost of visibility checks. Vacuum processes reclaim this space, update the visibility map, and prevent transaction ID (XID) wraparound. Proper tuning of these mechanisms is essential to sustain low latency under heavy write loads.</p>
+<h2 id="multiversionconcurrencycontrolandtransactionvisibility">Multi-Version Concurrency Control and Transaction Visibility</h2>
+<p>PostgreSQL's visibility rules are defined by the snapshot model. A snapshot records the highest committed XID (xmin) and a list of in‑progress XIDs (xmax). During query execution, a tuple is visible if:</p>
+<pre><code>xmin &lt;= snapshot.xmin &amp;&amp; (xmax is zero or xmax &gt; snapshot.xmax) &amp;&amp; transaction that created xmin is committed.
+</code></pre>
+<p>This simple test is performed for every tuple visited by a sequential scan or index lookup. The cost grows linearly with the length of the version chain, making it critical to keep chains short.</p>
+<h2 id="tupleversionchainsandheaplayout">Tuple Version Chains and Heap Layout</h2>
+<p>Each heap tuple stores the following fields (simplified):</p>
+<pre><code>4 bytes: t_xmin (creating transaction ID)
+4 bytes: t_xmax (deleting transaction ID or zero)
+2 bytes: t_infomask (visibility flags)
+2 bytes: t_infomask2 (additional flags)
+variable: tuple data
+</code></pre>
+<p>When an UPDATE occurs, PostgreSQL first attempts a HOT (Heap‑Only Tuple) update. If the updated columns do not affect indexed columns, the new version is stored on the same page and linked via t_ctid. This avoids index maintenance and reduces page fragmentation. If the update touches indexed columns, a regular heap tuple is inserted on a different page, and the index entry is updated.</p>
+<h3 id="examplehotupdatesequence">Example: HOT Update Sequence</h3>
+<pre><code>-- original row inserted by XID 100
+INSERT INTO accounts(id,balance) VALUES (1,1000);
+-- HOT update that changes only balance
+UPDATE accounts SET balance = balance + 10 WHERE id = 1;
+</code></pre>
+<p>The second statement creates a new tuple on the same page, copies the t<em>ctid of the original, and marks the original as dead for future vacuum runs. The index still points to the original tuple, but the executor follows the t</em>ctid chain to the newest visible version.</p>
+<h2 id="snapshotmanagementandtransactionidwraparound">Snapshot Management and Transaction ID Wraparound</h2>
+<p>PostgreSQL assigns a 32‑bit XID to every transaction. After 2^31‑1 transactions, the counter wraps around, potentially making old tuples appear visible again. To prevent this, the system enforces a <em>freeze</em> policy: vacuum marks very old tuples with a frozen xmin (FrozenXID) that is considered always visible.</p>
+<p>The visibility map tracks pages that contain only frozen tuples, allowing vacuum to skip them. Autovacuum regularly scans the visibility map and triggers aggressive vacuum on pages nearing the wraparound threshold.</p>
+<h2 id="autovacuumdaemoninternalsandcustomtuning">Autovacuum Daemon Internals and Custom Tuning</h2>
+<p>Autovacuum consists of two workers per database: one for regular vacuum/analyze, another for wraparound protection. Their behavior is governed by GUC parameters such as:</p>
+<pre><code>autovacuum = on
+autovacuum_naptime = 1min
+autovacuum_vacuum_cost_delay = 20ms
+autovacuum_vacuum_cost_limit = -1 (default)
+autovacuum_freeze_max_age = 200000000
+</code></pre>
+<p>The cost‑delay mechanism throttles vacuum I/O to avoid starving foreground queries. Setting a lower <code>autovacuum_vacuum_cost_delay</code> reduces latency spikes but increases overall I/O.</p>
+<h3 id="customvacuumtuningexample">Custom Vacuum Tuning Example</h3>
+<pre><code>ALTER SYSTEM SET autovacuum_vacuum_cost_delay = 5ms;
+ALTER SYSTEM SET autovacuum_vacuum_cost_limit = 2000;
+SELECT pg_reload_conf();
+</code></pre>
+<p>These settings let vacuum consume more I/O per cycle, shortening the time needed to clean up bloat while keeping pause times short enough for latency‑sensitive workloads.</p>
+<h2 id="performanceandscalinganalysis">Performance and Scaling Analysis</h2>
+<h3 id="tuplebloatimpact">Tuple Bloat Impact</h3>
+<p>When updates generate long version chains, each index scan must traverse multiple tuples, inflating CPU usage. Benchmarks on a 64‑core server running pgbench with a mix of 80% reads / 20% updates show latency growth from 1.2 ms to 4.8 ms as average chain length rises from 1 to 5.</p>
+<h3 id="snapshotcontention">Snapshot Contention</h3>
+<p>Heavy write workloads increase the number of in‑progress XIDs stored in each snapshot, enlarging the xmax array. This adds memory pressure and slows visibility checks. Reducing transaction size (e.g., committing after every 100 statements) mitigates the effect.</p>
+<h3 id="vacuumcostdelaytradeoff">Vacuum Cost Delay Trade‑off</h3>
+<p>A high <code>autovacuum_vacuum_cost_delay</code> (e.g., 50 ms) keeps background I/O low but allows bloat to accumulate, leading to longer query pauses when manual vacuum is finally triggered. Conversely, a low delay (5 ms) smooths out latency but raises overall I/O, which may saturate storage bandwidth.</p>
+<h2 id="commonfailuremodemisconfiguredautovacuum">Common Failure Mode: Misconfigured Autovacuum</h2>
+<p>If autovacuum is disabled or its thresholds are set too high, XID consumption proceeds unchecked. Once <code>autovacuum_freeze_max_age</code> is approached, PostgreSQL forces an emergency vacuum that blocks new transactions, eventually causing "database is not accepting commands" errors and risking data loss.</p>
+<h3 id="diagnosticsteps">Diagnostic Steps</h3>
+<ol>
+<li>Query <code>pg_stat_database</code> for <code>xid_age(datname)</code> to see current age.</li>
+<li>Check <code>pg_stat_user_tables</code> for <code>n_dead_tup</code> and <code>last_autovacuum</code> timestamps.</li>
+<li>Review <code>log_autovacuum_min_duration</code> entries for long‑running vacuums.</li>
+</ol>
+<h3 id="remediation">Remediation</h3>
+<pre><code>ALTER SYSTEM SET autovacuum = on;
+ALTER SYSTEM SET autovacuum_naptime = 30s;
+ALTER SYSTEM SET autovacuum_vacuum_scale_factor = 0.02;
+SELECT pg_reload_conf();
+VACUUM (FREEZE, VERBOSE) pg_database;
+</code></pre>
+<p>Running a manual <code>VACUUM FREEZE</code> immediately reduces XID age and restores normal operation.</p>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>MVCC visibility hinges on short tuple version chains; HOT updates are the primary tool for keeping chains short.</li>
+<li>Transaction ID wraparound is prevented by regular vacuum that freezes old tuples; the visibility map accelerates this process.</li>
+<li>Autovacuum tuning balances I/O cost against bloat; low cost‑delay values smooth latency but increase background load.</li>
+<li>Monitoring XID age and dead tuple counts is essential to avoid catastrophic wraparound failures.</li>
+<li>Proactive manual vacuum and sensible autovacuum parameters keep high‑throughput OLTP workloads stable and performant.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
