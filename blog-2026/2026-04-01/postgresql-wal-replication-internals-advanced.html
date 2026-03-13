@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Deep Dive into PostgreSQL WAL Replay: Logical Decoding, Replication Slots, and Production Scaling</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-04-01
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    An exhaustive exploration of PostgreSQL's Write-Ahead Logging replay pipeline, covering logical decoding architecture, replication slot management, performance tuning, and real‑world failure patterns.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">wal</span>
+    <span class="tag">replication</span>
+    <span class="tag">internals</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>PostgreSQL guarantees durability and point‑in‑time recovery through its Write‑Ahead Logging (WAL) subsystem. Every change to a data page is first recorded in the WAL before the page itself is flushed to disk. This design decouples transaction commit latency from physical I/O, enables crash recovery, and forms the backbone of logical replication.</p>
+<p>When a logical subscriber connects, the server streams a filtered view of the WAL that contains only row‑level changes. The logical decoding pipeline transforms raw WAL records into a stream of change sets that can be replayed on a downstream system. Replication slots preserve the minimum required WAL position, preventing premature recycling and ensuring that all subscribers stay in sync.</p>
+<p>The following sections dissect the pipeline, examine the slot lifecycle, and explore scaling considerations that arise in production environments.</p>
+<h2 id="logicaldecodingpipeline">Logical Decoding Pipeline</h2>
+<p>The logical decoding process is orchestrated by three core components:</p>
+<ol>
+<li><strong>walreceiver</strong> – runs on the subscriber, establishes a replication connection, and pulls WAL data from the primary.</li>
+<li><strong>waldecoder</strong> – part of the walsender on the primary, it applies output plugins (e.g., <code>pgoutput</code>, <code>wal2json</code>) to translate raw WAL into logical messages.</li>
+<li><strong>apply worker</strong> – on the subscriber, consumes the logical stream and replays changes inside a transaction.</li>
+</ol>
+<p>The flow can be visualised as:</p>
+<pre><code>primary (walsender) → network → subscriber (walreceiver) → decoder → apply worker
+</code></pre>
+<p>Each logical message carries a Log Sequence Number (LSN) that marks its position in the original WAL. The subscriber records the last applied LSN in its replication slot state, allowing the primary to truncate WAL safely.</p>
+<h2 id="replicationslotlifecycle">Replication Slot Lifecycle</h2>
+<p>A replication slot is created with <code>SELECT * FROM pg_create_logical_replication_slot('slot_name', 'pgoutput');</code>. The slot persists across restarts and tracks two LSNs:</p>
+<ul>
+<li><strong>restart_lsn</strong> – the oldest WAL byte still needed by any subscriber.</li>
+<li><strong>confirmed<em>flush</em>lsn</strong> – the last LSN that the subscriber has acknowledged as safely written.</li>
+</ul>
+<p>When a subscriber disconnects, the slot remains active unless explicitly dropped. This prevents WAL removal but can lead to uncontrolled growth if the slot is idle for long periods.</p>
+<h3 id="managingslotbloat">Managing Slot Bloat</h3>
+<p>sql<br />
+SELECT slot<em>name, restart</em>lsn, pg<em>size</em>pretty(pg<em>wal</em>lsn<em>diff(pg</em>current<em>wal</em>lsn(), restart<em>lsn)) AS retained
+FROM pg</em>replication_slots;</p>
+<p>Regular monitoring and automated cleanup (e.g., <code>pg_drop_replication_slot</code>) are essential in large clusters.</p>
+<h2 id="lsntrackingandsnapshotmanagement">LSN Tracking and Snapshot Management</h2>
+<p>Logical decoding must present a consistent view of the database at each transaction boundary. The decoder captures a snapshot identifier (<code>snapshot_name</code>) that the subscriber can reuse when applying changes out of order. Internally, PostgreSQL stores these snapshots in <code>pg_snapshots</code> and ties them to the LSN at which the snapshot was taken.</p>
+<p>When a subscriber requests a restart from a specific LSN, the primary validates that the LSN is not older than <code>restart_lsn</code>. If it is, the subscriber must perform a base backup to re‑initialize.</p>
+<h2 id="walreceiversenderandparallelapplyworkers">WAL Receiver / Sender and Parallel Apply Workers</h2>
+<p>The <code>walreceiver</code> process runs under the <code>replication</code> role and writes incoming WAL chunks to a temporary file (<code>walreceiver.pid</code>). The <code>walsender</code> on the primary respects the <code>wal_sender_timeout</code> and <code>wal_receiver_status_interval</code> settings to avoid stalls.</p>
+<p>From PostgreSQL 14 onward, logical replication can leverage <strong>parallel apply workers</strong>. Setting <code>max_logical_replication_workers</code> and <code>max_sync_workers_per_subscription</code> enables the subscriber to split the incoming stream into multiple apply threads, each handling a subset of tables. This reduces latency for high‑throughput workloads.</p>
+<p>conf</p>
+<h1 id="postgresqlconfsubscriber">postgresql.conf (subscriber)</h1>
+<p>max<em>logical</em>replication<em>workers = 8
+max</em>sync<em>workers</em>per<em>subscription = 4
+wal</em>receiver<em>status</em>interval = 10s</p>
+<h2 id="performanceandscaling">Performance and Scaling</h2>
+<h3 id="checkpointtuning">Checkpoint Tuning</h3>
+<p>Checkpoints determine when dirty buffers are flushed to disk. A too‑aggressive checkpoint interval (<code>checkpoint_timeout</code>) can cause frequent WAL file recycling, increasing I/O pressure on the primary. Conversely, a very long interval may delay WAL removal, inflating disk usage for active slots.</p>
+<p>conf</p>
+<h1 id="examplebalancedsettings">Example balanced settings</h1>
+<p>checkpoint<em>timeout = 15min
+max</em>wal<em>size = 4GB
+min</em>wal_size = 1GB</p>
+<h3 id="wal_bufferssizing">wal_buffers Sizing</h3>
+<p><code>wal_buffers</code> reserves shared memory for WAL data before it is written to the WAL segment. For logical replication with many concurrent subscribers, increasing this buffer reduces back‑pressure on the <code>walsender</code>.</p>
+<p>conf<br />
+wal<em>buffers = 16MB   # default is 1/64 of shared</em>buffers</p>
+<h3 id="networkbackpressure">Network Back‑Pressure</h3>
+<p>The primary monitors the subscriber's feedback via <code>StandbyStatusUpdate</code> messages. If the subscriber lags, the primary throttles WAL transmission, which can be observed in <code>pg_stat_replication</code> under <code>write_lag</code> and <code>flush_lag</code>. Adjusting <code>wal_sender_timeout</code> and <code>wal_receiver_timeout</code> helps avoid premature disconnections.</p>
+<h3 id="scalingtomanysubscribers">Scaling to Many Subscribers</h3>
+<p>When the number of logical subscribers grows, the primary's CPU usage for decoding can become a bottleneck. Strategies include:</p>
+<ul>
+<li>Deploying a <strong>dedicated decoding node</strong> that receives WAL once and forwards decoded messages to multiple downstream consumers.</li>
+<li>Using <strong>partitioned publications</strong> to limit the volume of data each subscriber receives.</li>
+<li>Leveraging <strong>pglogical</strong> extensions that support multi‑master topologies and more efficient change capture.</li>
+</ul>
+<h2 id="commonfailuremodes">Common Failure Modes</h2>
+<h3 id="replicationslotbloat">Replication Slot Bloat</h3>
+<p>If a slot is idle, <code>restart_lsn</code> stops advancing, causing WAL files to accumulate. Disk exhaustion is a frequent symptom. Mitigation steps:</p>
+<ol>
+<li>Monitor <code>pg_replication_slots</code> regularly.</li>
+<li>Set <code>wal_keep_size</code> as a safety net.</li>
+<li>Automate slot retirement after a configurable idle period.</li>
+</ol>
+<h3 id="misalignedlsnanddataloss">Mis‑aligned LSN and Data Loss</h3>
+<p>Attempting to restart a subscriber from an LSN older than <code>restart_lsn</code> results in an error:</p>
+<p>ERROR:  could not find a valid restart point for replication slot "slot_name"</p>
+<p>The only safe recovery is to take a fresh base backup and recreate the subscription. To avoid this, ensure that subscribers acknowledge progress promptly (<code>pg_replication_origin_advance</code>).</p>
+<h3 id="inconsistentsnapshots">Inconsistent Snapshots</h3>
+<p>When a subscriber applies changes out of order, foreign key constraints may temporarily fail. Logical decoding plugins provide the <code>include-timestamp</code> and <code>include-transaction</code> options to help reconstruct the original order. If ordering cannot be guaranteed, consider disabling constraint checks during bulk apply and re‑enabling them afterward.</p>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li><p>WAL is the single source of truth; logical decoding translates it into a consumable change stream.</p></li>
+<li><p>Replication slots protect required WAL but must be actively managed to prevent bloat.</p></li>
+<li><p>Proper LSN tracking, snapshot handling, and feedback loops are essential for reliable replay.</p></li>
+<li><p>Performance hinges on checkpoint configuration, <code>wal_buffers</code>, and network latency; parallel apply workers can scale out replay work.</p></li>
+<li><p>Common pitfalls include idle slots causing disk exhaustion and attempts to restart from stale LSNs, both of which demand proactive monitoring and clear recovery procedures.</p></li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
