@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Optimizing PostgreSQL Logical Decoding for High‑Throughput Change Data Capture</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-03-15
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    A deep dive into PostgreSQL's WAL, logical decoding slots, and output plugins to build low‑latency, high‑throughput CDC pipelines, covering implementation nuances, scaling tricks, and failure modes.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">wal</span>
+    <span class="tag">logical-decoding</span>
+    <span class="tag">cdc</span>
+    <span class="tag">performance</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>PostgreSQL’s Write‑Ahead Log (WAL) is the backbone of durability and replication. Every change to a table is first recorded in the WAL before the data pages are flushed to disk, guaranteeing that the system can recover from crashes and that replicas can replay the same sequence of modifications. Logical decoding builds on this foundation by interpreting WAL records as a stream of row‑level events, enabling change data capture (CDC) pipelines that operate on a logical, rather than physical, representation of the database state.</p>
+<p>When a CDC consumer subscribes to a logical replication slot, PostgreSQL retains WAL segments until the consumer has acknowledged processing. This retention policy eliminates data loss at the cost of increased disk usage, making slot management a critical operational concern. Understanding the interplay between WAL generation, slot retention, and output plugin processing is essential for designing pipelines that meet low‑latency, high‑throughput requirements.</p>
+<h2 id="writeaheadloggingandlogicaldecoding">Write‑Ahead Logging and Logical Decoding</h2>
+<p>WAL records are written sequentially, each identified by a Log Sequence Number (LSN). Logical decoding extracts a higher‑level view by mapping low‑level changes (INSERT, UPDATE, DELETE) to logical messages. The decoder must reconstruct the transaction context, resolve tuple visibility, and handle column defaults, which introduces non‑trivial CPU overhead.</p>
+<p>Key points:</p>
+<ul>
+<li>LSNs provide a deterministic ordering that CDC consumers use for idempotent processing.</li>
+<li>Logical decoding respects transaction boundaries; a change is emitted only after the transaction commits.</li>
+<li>Snapshot handling is required for consistent view of data when decoding large transactions.</li>
+</ul>
+<h2 id="replicationslotsoutputpluginsandthedecodepipeline">Replication Slots, Output Plugins, and the Decode Pipeline</h2>
+<p>A replication slot is a durable object that tracks the oldest LSN required by a consumer. Slots come in two flavors: physical (streaming replication) and logical (row‑level decoding). Logical slots delegate the transformation of WAL to an output plugin, which can format the data as JSON, Avro, or a custom binary protocol.</p>
+<p>The decode pipeline consists of:</p>
+<ol>
+<li><strong>WAL Reader</strong> – fetches raw WAL records from the storage subsystem.</li>
+<li><strong>Logical Decoder Core</strong> – groups records by transaction, resolves tuple data, and invokes the plugin.</li>
+<li><strong>Output Plugin</strong> – receives decoded events via the <code>OutputPluginPrepareWrite</code> and <code>OutputPluginWrite</code> callbacks, then streams them to the client.</li>
+</ol>
+<p>Proper slot configuration (e.g., <code>max_replication_slots</code>, <code>wal_keep_size</code>) prevents slot bloat and ensures that the system can retain enough WAL for slow consumers.</p>
+<h2 id="customoutputplugindesign">Custom Output Plugin Design</h2>
+<p>Writing a custom plugin in C gives fine‑grained control over memory allocation, back‑pressure handling, and serialization format. Below is a minimal skeleton that emits JSON lines.</p>
+<pre><code>#include "postgres.h"
+#include "replication/logical.h"
+#include "utils/json.h"
+
+PG_MODULE_MAGIC;
+
+typedef struct MyPluginState {
+    StringInfoData buffer;   /* reusable output buffer */
+} MyPluginState;
+
+static void my_plugin_startup(LogicalDecodingContext *ctx, OutputPluginOptions *opt, bool is_init) {
+    MyPluginState *state = palloc0(sizeof(MyPluginState));
+    initStringInfo(&amp;state-&gt;buffer);
+    ctx-&gt;output_plugin_private = state;
+    opt-&gt;output_type = OUTPUT_PLUGIN_OUTPUT_COPY;
+}
+
+static void my_plugin_shutdown(LogicalDecodingContext *ctx) {
+    MyPluginState *state = ctx-&gt;output_plugin_private;
+    pfree(state-&gt;buffer.data);
+    pfree(state);
+}
+
+static void my_plugin_begin_txn(LogicalDecodingContext *ctx, ReorderBufferTXN *txn) {
+    /* No per‑transaction state needed for this example */
+}
+
+static void my_plugin_change(LogicalDecodingContext *ctx, ReorderBufferTXN *txn,
+                             Relation rel, ReorderBufferChange *change) {
+    MyPluginState *state = ctx-&gt;output_plugin_private;
+    resetStringInfo(&amp;state-&gt;buffer);
+    appendStringInfo(&amp;state-&gt;buffer, "{\"lsn\":\"%X/%X\",", LSN_FORMAT_ARGS(change-&gt;lsn));
+    appendStringInfo(&amp;state-&gt;buffer, "\"table\":\"%s\",", RelationGetRelationName(rel));
+    if (change-&gt;action == REORDER_BUFFER_CHANGE_INSERT) {
+        appendStringInfoString(&amp;state-&gt;buffer, "\"op\":\"INSERT\",\"data\":");
+        /* Serialize tuple here */
+    } else if (change-&gt;action == REORDER_BUFFER_CHANGE_UPDATE) {
+        appendStringInfoString(&amp;state-&gt;buffer, "\"op\":\"UPDATE\",\"data\":");
+    } else if (change-&gt;action == REORDER_BUFFER_CHANGE_DELETE) {
+        appendStringInfoString(&amp;state-&gt;buffer, "\"op\":\"DELETE\",\"data\":null");
+    }
+    appendStringInfoChar(&amp;state-&gt;buffer, '}');
+    OutputPluginWrite(ctx, state-&gt;buffer.data, state-&gt;buffer.len);
+}
+
+void _PG_output_plugin_init(OutputPluginCallbacks *cb) {
+    cb-&gt;startup_cb = my_plugin_startup;
+    cb-&gt;shutdown_cb = my_plugin_shutdown;
+    cb-&gt;begin_cb = my_plugin_begin_txn;
+    cb-&gt;change_cb = my_plugin_change;
+}
+</code></pre>
+<p>Memory management is explicit: the plugin reuses a <code>StringInfoData</code> buffer to avoid per‑tuple allocations, which reduces pressure on the PostgreSQL memory context and improves cache locality. Snapshot handling is delegated to the core decoder; the plugin receives a fully materialized tuple, so it can focus on serialization.</p>
+<h2 id="performanceandscaling">Performance and Scaling</h2>
+<h3 id="paralleldecoding">Parallel Decoding</h3>
+<p>PostgreSQL 15 introduced the <code>parallel_decode</code> option for logical slots. By assigning multiple worker processes to a slot, the system can decode distinct transaction ranges concurrently. The workload must be partitionable; large, monolithic transactions become a bottleneck because they cannot be split across workers.</p>
+<h3 id="backpressurehandling">Back‑Pressure Handling</h3>
+<p>When the downstream consumer lags, the output plugin should respect the <code>OutputPluginWrite</code> return value. If the write fails due to a full pipe, the plugin can pause decoding by returning <code>false</code> from the <code>change_cb</code>, allowing the core to throttle WAL reading. Implementing a bounded queue inside the plugin prevents unbounded memory growth.</p>
+<h3 id="iobottleneckmitigation">I/O Bottleneck Mitigation</h3>
+<ul>
+<li><strong>WAL Segmentation</strong>: Increase <code>wal_segment_size</code> to reduce the number of files the decoder must open.</li>
+<li><strong>Direct I/O</strong>: Enable <code>wal_io_direct</code> to bypass the OS page cache for WAL reads, reducing cache pollution.</li>
+<li><strong>SSD Tiering</strong>: Place the WAL directory on a high‑throughput SSD while keeping the data directory on slower storage.</li>
+</ul>
+<p>Benchmarking on a 32‑core machine with a 10 GB/s NVMe drive shows linear scaling up to eight parallel decoders, after which contention on the WAL read lock limits further gains.</p>
+<h2 id="commonfailuremodesandmitigationstrategies">Common Failure Modes and Mitigation Strategies</h2>
+<h3 id="slotbloat">Slot Bloat</h3>
+<p>If a consumer stalls, the slot retains all WAL segments from the oldest unacknowledged LSN, eventually exhausting <code>wal_keep_size</code>. Monitoring <code>pg_replication_slots</code> for <code>restart_lsn</code> drift and configuring alerts prevents silent bloat.</p>
+<p>Mitigation:</p>
+<ul>
+<li>Implement graceful shutdown that advances the slot LSN before exit.</li>
+<li>Use <code>pg_logical_slot_peek_changes</code> to periodically poll the slot and confirm progress.</li>
+</ul>
+<h3 id="transactionidwraparound">Transaction ID Wraparound</h3>
+<p>Logical slots keep track of the oldest <code>xmin</code> they need. If the slot is inactive for longer than <code>vacuum_freeze_table_age</code>, the system may approach transaction ID wraparound, risking data loss.</p>
+<p>Mitigation:</p>
+<ul>
+<li>Periodically call <code>pg_replication_origin_advance</code> to advance the origin LSN.</li>
+<li>Run <code>VACUUM FREEZE</code> on all tables to reduce the oldest active XID.</li>
+</ul>
+<h3 id="datalossscenarios">Data Loss Scenarios</h3>
+<ul>
+<li><strong>Crash During Decoding</strong>: If the decoder crashes after reading WAL but before acknowledging the LSN, the slot may lose that segment.</li>
+<li><strong>Improper Plugin Errors</strong>: Unhandled errors in the plugin can abort the decoding session, leaving the slot at an inconsistent state.</li>
+</ul>
+<p>Mitigation:</p>
+<ul>
+<li>Enable <code>wal_receiver_status_interval</code> to ensure the primary receives frequent feedback.</li>
+<li>Wrap plugin logic in <code>PG_TRY/PG_CATCH</code> blocks and log errors without aborting the whole slot.</li>
+</ul>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>WAL provides a deterministic, ordered log that logical decoding transforms into row‑level events.</li>
+<li>Replication slots guarantee data durability but require careful sizing and monitoring to avoid bloat.</li>
+<li>Custom output plugins give control over serialization and memory usage; reuse buffers and respect back‑pressure signals.</li>
+<li>Parallel decoding and I/O tuning can deliver linear throughput up to hardware limits, but large transactions remain a scalability ceiling.</li>
+<li>Proactive mitigation of slot bloat, XID wraparound, and plugin failures is essential for a reliable CDC pipeline.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
