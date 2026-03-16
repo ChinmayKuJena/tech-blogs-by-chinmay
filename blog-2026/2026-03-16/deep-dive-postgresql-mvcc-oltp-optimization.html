@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Deep Dive into PostgreSQL MVCC: Optimizing High‑Throughput OLTP with Transaction ID Management</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-03-16
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    An expert‑level examination of PostgreSQL's Multi‑Version Concurrency Control, its internal structures, and how to tune MVCC for massive OLTP workloads while avoiding common pitfalls.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">mvcc</span>
+    <span class="tag">performance</span>
+    <span class="tag">vacuum</span>
+    <span class="tag">oltp</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <h2 id="introduction">Introduction</h2>
+<p>PostgreSQL’s Multi‑Version Concurrency Control (MVCC) is the foundation that enables high‑throughput online transaction processing (OLTP) without locking readers. Each row version carries transaction identifiers (XIDs) that determine its visibility to a given snapshot. Understanding the exact mechanics of tuple headers, visibility maps, and snapshot generation is essential when the system processes millions of transactions per second.</p>
+<p>When the transaction ID space wraps around or when long‑running transactions hold old snapshots, MVCC can become a performance bottleneck. This article walks through the internal data structures, the vacuum subsystem, and practical tuning steps that keep MVCC overhead low while preserving data integrity.</p>
+<hr />
+<h2 id="coreconceptmvccandtransactionvisibilityrules">Core Concept: MVCC and Transaction Visibility Rules</h2>
+<p>PostgreSQL assigns a monotonically increasing 32‑bit transaction ID to every transaction. A tuple header stores <code>xmin</code> (creating XID) and <code>xmax</code> (deleting XID, or <code>InvalidTransactionId</code> if still alive). A snapshot consists of:</p>
+<ul>
+<li><code>xmin</code> – the oldest active XID at snapshot creation.</li>
+<li><code>xmax</code> – the newest XID that has committed.</li>
+<li>A list of in‑progress XIDs.</li>
+</ul>
+<p>Visibility is evaluated as:</p>
+<p>sql<br />
+-- Visible if:<br />
+--   xmin <= snapshot.xmax && (xmax is null || xmax > snapshot.xmin) &amp;&amp;<br />
+--   xmin not in snapshot.in<em>progress && xmax not in snapshot.in</em>progress</p>
+<p>The rules guarantee that a transaction sees a consistent view of the database without acquiring row‑level locks.</p>
+<hr />
+<h2 id="architecturetupleheaderlayoutvisibilitymapandsnapshotgeneration">Architecture: Tuple Header Layout, Visibility Map, and Snapshot Generation</h2>
+<h3 id="tupleheader">Tuple Header</h3>
+<table>
+<thead>
+<tr>
+<th id="field">Field</th>
+<th id="size">Size</th>
+<th id="meaning">Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>xmin</code></td>
+<td>4 bytes</td>
+<td>Creating transaction ID</td>
+</tr>
+<tr>
+<td><code>xmax</code></td>
+<td>4 bytes</td>
+<td>Deleting transaction ID (or <code>InvalidTransactionId</code>)</td>
+</tr>
+<tr>
+<td><code>t_infomask</code></td>
+<td>2 bytes</td>
+<td>Flags (heap‑only tuple, frozen, etc.)</td>
+</tr>
+<tr>
+<td><code>t_infomask2</code></td>
+<td>2 bytes</td>
+<td>Additional flags (xmin/xmax frozen)</td>
+</tr>
+</tbody>
+</table>
+<p>The header is compact, but every row read forces a few integer comparisons. The visibility map (<code>VM</code>) tracks pages that contain only tuples visible to all transactions, allowing the planner to skip page‑level visibility checks during index scans.</p>
+<h3 id="snapshotgeneration">Snapshot Generation</h3>
+<p>PostgreSQL builds a snapshot in two phases:</p>
+<ol>
+<li>Acquire a lock on <code>ProcArray</code> and copy the list of active XIDs.</li>
+<li>Record the current <code>nextXID</code> as <code>xmax</code>.</li>
+</ol>
+<p>The snapshot is stored in <code>SnapshotData</code> and propagated to workers, logical replication slots, and hot‑standby servers. Hot‑standby snapshots are generated by the WAL replay process, which must respect the same visibility rules to avoid serving stale data.</p>
+<hr />
+<h2 id="implementationdeepdivevacuumstrategiestransactionidwraparoundandhotstandbysnapshotpropagation">Implementation Deep Dive: Vacuum Strategies, Transaction ID Wraparound, and Hot‑Standby Snapshot Propagation</h2>
+<h3 id="vacuumbasics">Vacuum Basics</h3>
+<p><code>VACUUM</code> reclaims dead tuples and updates the visibility map. Two modes exist:</p>
+<ul>
+<li><strong>Standard vacuum</strong> – runs periodically, cleans up after committed transactions.</li>
+<li><strong>Autovacuum</strong> – background workers that trigger based on thresholds (<code>autovacuum_vacuum_threshold</code>, <code>autovacuum_vacuum_scale_factor</code>).</li>
+</ul>
+<p>A minimal example of a custom vacuum configuration for a high‑throughput table:</p>
+<p>sql<br />
+ALTER TABLE orders SET (autovacuum<em>vacuum</em>scale<em>factor = 0.02);
+ALTER TABLE orders SET (autovacuum</em>vacuum<em>threshold = 500);
+ALTER TABLE orders SET (autovacuum</em>freeze<em>max</em>age = 1500000000);</p>
+<h3 id="transactionidwraparound">Transaction ID Wraparound</h3>
+<p>The 32‑bit XID space yields ~2 billion IDs before wraparound. PostgreSQL forces a <strong>freeze</strong> of old tuples once <code>age(datfrozenxid) &gt; autovacuum_freeze_max_age</code>. If wraparound is approached, the system launches a <strong>forced vacuum</strong> that scans the entire database.</p>
+<p>A proactive strategy:</p>
+<p>sql<br />
+-- Raise the safety margin<br />
+SET autovacuum<em>freeze</em>max<em>age = 1500000000;  -- default 200 million
+-- Force a manual freeze on critical tables
+VACUUM (FREEZE, VERBOSE) large</em>table;</p>
+<h3 id="hotstandbysnapshotpropagation">Hot‑Standby Snapshot Propagation</h3>
+<p>During streaming replication, the standby server builds <strong>recovery snapshots</strong> from WAL records. The <code>wal_keep_segments</code> and <code>max_standby_streaming_delay</code> parameters control how long the standby can lag before it must cancel conflicting queries. Proper tuning prevents excessive WAL retention while ensuring that long‑running read‑only transactions on the standby do not block vacuum on the primary.</p>
+<hr />
+<h2 id="performancescalinganalysismeasuringmvccoverheadwalimpactandindexbloatmitigation">Performance &amp; Scaling Analysis: Measuring MVCC Overhead, WAL Impact, and Index Bloat Mitigation</h2>
+<h3 id="measuringtuplevisibilitychecks">Measuring Tuple Visibility Checks</h3>
+<p><code>pg_stat_all_tables</code> provides <code>heap_blks_hit</code> vs. <code>heap_blks_read</code>. A high hit ratio indicates that the visibility map is effective. Example query:</p>
+<p>sql<br />
+SELECT relname,<br />
+       heap<em>blks</em>hit * 100.0 / (heap<em>blks</em>hit + heap<em>blks</em>read) AS hit<em>pct
+FROM pg</em>stat<em>all</em>tables<br />
+WHERE schemaname = 'public';</p>
+<p>If the hit percentage drops below 90 %, consider increasing <code>autovacuum_vacuum_scale_factor</code> or manually vacuuming hot tables.</p>
+<h3 id="walvolume">WAL Volume</h3>
+<p>Each tuple update generates a WAL record. Under heavy OLTP, WAL can dominate I/O. <code>wal_compression</code> and <code>wal_level = replica</code> reduce size, while <code>max_wal_size</code> and <code>checkpoint_timeout</code> balance checkpoint frequency.</p>
+<h3 id="indexbloat">Index Bloat</h3>
+<p>Dead tuples leave behind index entries that are not reclaimed by vacuum. The <code>pgstattuple</code> extension can quantify bloat:</p>
+<p>sql<br />
+SELECT relname, dead<em>tuple</em>percent<br />
+FROM pgstatindex('orders_idx');</p>
+<p>Rebuilding an index is cheaper than a full table rewrite when bloat exceeds 30 %:</p>
+<p>sql<br />
+REINDEX INDEX CONCURRENTLY orders_idx;</p>
+<hr />
+<h2 id="commonfailuremodelongrunningtransactionscausingtransactionidexhaustionandtablebloat">Common Failure Mode: Long‑Running Transactions Causing Transaction ID Exhaustion and Table Bloat</h2>
+<p>A transaction that remains open for hours holds its snapshot, preventing vacuum from freezing old tuples. This leads to:</p>
+<ul>
+<li><strong>Transaction ID exhaustion</strong> – <code>ERROR: database is not accepting commands to avoid wraparound data loss</code>.</li>
+<li><strong>Table bloat</strong> – dead tuples accumulate because vacuum cannot reclaim them.</li>
+</ul>
+<h3 id="detection">Detection</h3>
+<p>sql<br />
+SELECT pid, age(datfrozenxid) AS xid<em>age, query</em>start, now() - query<em>start AS duration
+FROM pg</em>stat<em>activity a
+JOIN pg</em>database d ON a.datid = d.oid<br />
+WHERE state &lt;&gt; 'idle' AND age(datfrozenxid) &gt; 1000000000;</p>
+<h3 id="remediation">Remediation</h3>
+<ol>
+<li>Identify and terminate the offending backend (<code>pg_terminate_backend(pid)</code>).</li>
+<li>Run a forced vacuum with <code>FREEZE</code> on affected tables.</li>
+<li>Adjust application logic to keep transaction lifetimes short.</li>
+<li>Set <code>idle_in_transaction_session_timeout</code> to automatically abort idle transactions.</li>
+</ol>
+<hr />
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>MVCC visibility is driven by tuple headers, the visibility map, and snapshots; each component can be tuned independently.</li>
+<li>Autovacuum thresholds must be lowered for hot OLTP tables to keep the visibility map populated and prevent XID wraparound.</li>
+<li>Transaction ID wraparound is a hard limit; proactive freezing and monitoring <code>age(datfrozenxid)</code> are mandatory for large clusters.</li>
+<li>High‑throughput workloads benefit from measuring heap hit ratios, WAL volume, and index bloat; targeted REINDEX and checkpoint tuning reduce latency spikes.</li>
+<li>Long‑running transactions are the single most dangerous source of XID exhaustion; detection scripts and timeout policies should be part of any production deployment.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
