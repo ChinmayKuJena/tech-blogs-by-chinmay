@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Fine‑tuning PostgreSQL Checkpointing: From WAL Mechanics to Latency‑Critical Production</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-03-18
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    A deep dive into PostgreSQL's write‑ahead log checkpointing, covering its internal design, configurable patterns, production‑grade performance trade‑offs, and the pitfalls that cause latency spikes in high‑throughput workloads.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">wal</span>
+    <span class="tag">checkpoint</span>
+    <span class="tag">performance</span>
+    <span class="tag">reliability</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>PostgreSQL guarantees durability by persisting every change to the write‑ahead log (WAL) before the data page is flushed. A checkpoint is the point at which all dirty buffers have been written to the data files and the WAL segment up to that point is no longer required for crash recovery. The checkpoint process therefore bridges the gap between the high‑frequency WAL writes and the comparatively expensive data‑file I/O, providing a deterministic recovery horizon.</p>
+<p>In latency‑sensitive environments the checkpoint cadence becomes a primary source of performance variance. An aggressive schedule can flood the storage subsystem with large sequential writes, while a lax schedule may inflate recovery time and increase the risk of WAL‑segment exhaustion. Understanding the internal mechanics, the configurable knobs, and the interaction with the background writer is essential for tuning PostgreSQL to meet sub‑millisecond tail latency goals.</p>
+<h2 id="writeaheadloggingandtheroleofcheckpoints">Write‑Ahead Logging and the Role of Checkpoints</h2>
+<p>PostgreSQL's WAL is a circular set of 16 MiB segment files stored under pg_wal. Each transaction appends its redo records to the current segment, and the segment is sealed once it reaches capacity. A checkpoint records two critical pieces of state:</p>
+<ol>
+<li>The LSN (Log Sequence Number) of the last WAL record that has been flushed to the data files.</li>
+<li>The checkpoint location in the control file, which the recovery process reads on startup.</li>
+</ol>
+<p>During crash recovery PostgreSQL replays WAL from the checkpoint LSN forward, guaranteeing that all committed changes are reflected in the database. The checkpoint LSN therefore defines the lower bound of the replay window.</p>
+<h2 id="architecturepatterncheckpointschedulingbackgroundwriterandrecoverycoordination">Architecture Pattern: Checkpoint Scheduling, Background Writer, and Recovery Coordination</h2>
+<p>The checkpoint subsystem consists of three cooperating processes:</p>
+<ul>
+<li><strong>Checkpointer</strong> – a dedicated backend that initiates a checkpoint, writes dirty buffers, and updates the control file.</li>
+<li><strong>Background Writer</strong> – runs continuously, flushing buffers that have been idle for a configurable period, reducing the work the checkpointer must do.</li>
+<li><strong>Startup Process</strong> – during recovery, reads the checkpoint record and replays WAL until the end of the WAL.</li>
+</ul>
+<p>The checkpointer is triggered by either a timeout (checkpoint<em>timeout) or when the WAL size exceeds max</em>wal_size. When invoked, it performs the following steps:</p>
+<pre><code>1. Set a checkpoint LSN and write a checkpoint record to WAL.
+2. Signal the background writer to flush all buffers.
+3. Wait for the background writer to complete the flush.
+4. Update pg_control with the new checkpoint location.
+</code></pre>
+<p>The coordination ensures that no dirty page is left behind, and that the checkpoint record itself is durable before the data files are flushed.</p>
+<h2 id="configurableparametersandtheirinterplay">Configurable Parameters and Their Interplay</h2>
+<table>
+<thead>
+<tr>
+<th id="parameter">Parameter</th>
+<th id="default">Default</th>
+<th id="typical_production_range">Typical Production Range</th>
+<th id="effect">Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>checkpoint_timeout</td>
+<td>5min</td>
+<td>1‑15min</td>
+<td>Maximum time between checkpoints regardless of WAL size.</td>
+</tr>
+<tr>
+<td>max<em>wal</em>size</td>
+<td>1GiB</td>
+<td>2‑10GiB</td>
+<td>Upper bound for WAL growth; crossing this forces a checkpoint.</td>
+</tr>
+<tr>
+<td>checkpoint<em>completion</em>target</td>
+<td>0.9</td>
+<td>0.5‑0.9</td>
+<td>Fraction of checkpoint_timeout allocated to the flushing phase; higher values spread I/O over a longer period.</td>
+</tr>
+<tr>
+<td>wal<em>writer</em>delay</td>
+<td>200ms</td>
+<td>100‑500ms</td>
+<td>Frequency of WAL writer flushes; lower values increase write‑amplification.</td>
+</tr>
+<tr>
+<td>bgwriter_delay</td>
+<td>200ms</td>
+<td>50‑500ms</td>
+<td>How often the background writer scans buffers; tighter values reduce checkpoint work but increase background I/O.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="segmentmanagement">Segment Management</h3>
+<p>When a checkpoint completes, PostgreSQL may recycle old WAL segments. The recycle policy is governed by wal<em>keep</em>segments (deprecated) and the newer wal<em>keep</em>size. Setting these too high prevents segment reuse, causing disk consumption to climb. Conversely, setting them too low can trigger “checkpoint storms” where the checkpointer repeatedly recycles segments while the background writer lags behind.</p>
+<h3 id="timelinehandling">Timeline Handling</h3>
+<p>In replication or point‑in‑time recovery scenarios, each timeline represents a divergent history. The checkpointer records the current timeline in the checkpoint record. Misaligned timeline numbers across replicas can cause recovery to abort, manifesting as “could not locate a valid checkpoint record” errors.</p>
+<h2 id="performanceandscalinganalysis">Performance and Scaling Analysis</h2>
+<h3 id="latencyimpactondifferentstoragemedia">Latency Impact on Different Storage Media</h3>
+<table>
+<thead>
+<tr>
+<th id="storage">Storage</th>
+<th id="sequential_write_latency">Sequential Write Latency</th>
+<th id="random_write_latency">Random Write Latency</th>
+<th id="observed_checkpoint_spike">Observed Checkpoint Spike</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HDD</td>
+<td>10‑15 ms</td>
+<td>5‑8 ms</td>
+<td>Large spikes (tens of ms) due to seek overhead.</td>
+</tr>
+<tr>
+<td>SATA SSD</td>
+<td>0.1‑0.2 ms</td>
+<td>0.05‑0.1 ms</td>
+<td>Moderate spikes; mitigated by higher checkpoint<em>completion</em>target.</td>
+</tr>
+<tr>
+<td>NVMe</td>
+<td>&lt;0.05 ms</td>
+<td>&lt;0.02 ms</td>
+<td>Minimal spikes; checkpoint I/O becomes CPU‑bound.</td>
+</tr>
+</tbody>
+</table>
+<p>On HDDs the checkpoint flush dominates latency; spreading the flush with a lower checkpoint<em>completion</em>target can reduce tail latency at the cost of longer overall checkpoint duration. On NVMe, the bottleneck shifts to CPU and lock contention in the buffer manager.</p>
+<h3 id="adaptivecheckpointingstrategies">Adaptive Checkpointing Strategies</h3>
+<ol>
+<li><strong>Load‑aware throttling</strong> – monitor the write‑ahead log growth rate and dynamically adjust checkpoint<em>timeout. A simple heuristic: if WAL growth exceeds 75 % of max</em>wal<em>size within the last minute, halve checkpoint</em>timeout.</li>
+<li><strong>I/O budget enforcement</strong> – use the Linux cgroup blkio.throttle.write<em>bps</em>device limit to cap checkpoint I/O, allowing the background writer to continue serving regular queries.</li>
+<li><strong>Parallel checkpointing (PostgreSQL 15+)</strong> – enable checkpoint<em>flush</em>after to allow multiple buffers to be flushed concurrently, reducing wall‑clock time.</li>
+</ol>
+<h3 id="scalingwithconcurrentwriters">Scaling with Concurrent Writers</h3>
+<p>When the number of active backends rises, dirty buffers accumulate faster. The background writer’s effectiveness becomes critical; increasing bgwriter<em>lru</em>maxpages and reducing bgwriter_delay helps keep the dirty buffer ratio low. However, overly aggressive settings can cause the background writer to compete with regular query I/O, inflating response times.</p>
+<h2 id="commonfailuremodes">Common Failure Modes</h2>
+<h3 id="checkpointstorms">Checkpoint Storms</h3>
+<p>A checkpoint storm occurs when the system repeatedly initiates checkpoints before the previous one has finished. Symptoms include:</p>
+<ul>
+<li>Sustained high I/O utilization (&gt;90 %).</li>
+<li>WAL segment churn, leading to rapid disk consumption.</li>
+<li>Increased query latency spikes.</li>
+</ul>
+<p>Root causes are typically mis‑tuned max<em>wal</em>size combined with a low checkpoint<em>timeout. The remedy is to raise max</em>wal<em>size or increase checkpoint</em>completion_target, allowing the checkpointer more time to complete the flush.</p>
+<h3 id="iocontentionfrommistunedsettings">I/O Contention from Mis‑tuned Settings</h3>
+<p>Setting bgwriter<em>delay too low while also lowering checkpoint</em>timeout can saturate the storage device. The solution is to balance the two: a higher bgwriter<em>delay reduces background writer pressure, while a higher checkpoint</em>completion_target spreads checkpoint I/O.</p>
+<h3 id="datalossscenarios">Data Loss Scenarios</h3>
+<p>If the checkpoint record is not flushed to WAL before a power loss, PostgreSQL may lose the most recent checkpoint LSN, forcing replay from an earlier checkpoint. This can be mitigated by enabling synchronous_commit = on for the checkpoint record and ensuring the WAL device has battery‑backed write cache.</p>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>Checkpoints are the bridge between WAL durability and data‑file consistency; their frequency directly influences latency and recovery time.</li>
+<li>Tune checkpoint<em>timeout, max</em>wal<em>size, and checkpoint</em>completion_target together; changing one without the others creates imbalance.</li>
+<li>Leverage the background writer to smooth I/O, but avoid aggressive settings that compete with query workloads.</li>
+<li>Monitor WAL growth, dirty buffer ratios, and storage latency to detect checkpoint storms early.</li>
+<li>On modern NVMe storage, focus shifts from I/O throttling to CPU and lock contention; consider parallel checkpointing features where available.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
