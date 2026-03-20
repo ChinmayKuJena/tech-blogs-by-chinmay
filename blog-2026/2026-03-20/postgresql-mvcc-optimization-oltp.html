@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Inside PostgreSQL’s MVCC Engine: Optimizing High‑Throughput OLTP Workloads</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-03-20
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    A deep dive into PostgreSQL’s Multi‑Version Concurrency Control, covering its core design, implementation nuances, production‑grade tuning, scaling strategies, and the pitfalls that cause hidden latency spikes.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">mvcc</span>
+    <span class="tag">concurrency</span>
+    <span class="tag">performance</span>
+    <span class="tag">oltp</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>PostgreSQL’s Multi‑Version Concurrency Control (MVCC) is the foundation that enables true concurrent transaction processing without heavy locking. Each transaction sees a consistent snapshot of the database, while writers create new tuple versions that coexist with older ones. This model eliminates read‑write conflicts at the cost of maintaining a version chain for every row.</p>
+<p>Understanding MVCC is essential when the workload approaches millions of transactions per second (TPS). Small misconfigurations in snapshot handling, vacuuming, or checkpointing can introduce latency spikes that are hard to trace. The following sections dissect the engine, expose the hidden costs, and provide production‑grade tuning guidelines.</p>
+<h2 id="coreconceptvisibilityrulesandsnapshotmanagement">Core Concept: Visibility Rules and Snapshot Management</h2>
+<p>PostgreSQL determines row visibility using three transaction identifiers stored in each tuple header: <code>xmin</code>, <code>xmax</code>, and <code>cmin/cmax</code>. A row is visible to a transaction if:</p>
+<pre><code>xmin &lt;= current_xid &lt; xmax
+and the transaction that set xmin is committed
+and the transaction that set xmax is either not started or aborted.
+</code></pre>
+<p>Snapshots are acquired at the start of a transaction (or sub‑transaction) and consist of the current transaction ID (<code>xmin</code>) and a list of in‑progress transaction IDs (<code>xmax</code> list). The snapshot is stored in <code>SnapshotData</code> and reused for the transaction’s lifetime, ensuring repeatable reads.</p>
+<h2 id="architecturepatternbuffermanagerwalinteractionandtupleversionchain">Architecture Pattern: Buffer Manager, WAL Interaction, and Tuple Version Chain</h2>
+<p>The buffer manager caches pages in shared buffers. When a tuple is updated, PostgreSQL writes a new version to a fresh page (or the same page if a HOT update is possible). The Write‑Ahead Log (WAL) records the change before the buffer is flushed, guaranteeing durability.</p>
+<p>Tuple version chains are linked via the <code>t_ctid</code> field. The chain can grow indefinitely unless vacuum removes dead tuples. HOT (Heap‑Only Tuple) updates avoid index modifications by storing the new version on the same page and linking it via <code>t_ctid</code>. This reduces index churn and improves write throughput.</p>
+<h2 id="implementationdeepdive">Implementation Deep Dive</h2>
+<h3 id="snapshotacquisition">Snapshot Acquisition</h3>
+<p>c<br />
+Snapshot GetTransactionSnapshot(void)<br />
+{<br />
+    Snapshot snapshot;<br />
+    snapshot-&gt;xmin = GetCurrentTransactionId();<br />
+    snapshot-&gt;xmax = GetActiveSnapshotXmax();<br />
+    snapshot-&gt;xip = GetInProgressXids();<br />
+    return snapshot;<br />
+}</p>
+<p>The snapshot is immutable for the transaction’s duration. For read‑only queries, PostgreSQL can reuse a snapshot across multiple statements, reducing overhead.</p>
+<h3 id="tuplefreezing">Tuple Freezing</h3>
+<p>When a tuple’s <code>xmin</code> approaches the transaction ID wraparound limit (2^31), PostgreSQL freezes it by setting <code>xmin</code> to <code>FrozenTransactionId</code>. This prevents wraparound errors but requires periodic vacuuming with <code>vacuum_freeze_min_age</code> and <code>vacuum_freeze_table_age</code> tuned for the workload.</p>
+<h3 id="hotupdates">HOT Updates</h3>
+<p>A HOT update is chosen when the new tuple fits on the same page and no indexed columns change. The algorithm:</p>
+<ol>
+<li>Check if any indexed column is modified.</li>
+<li>Verify free space on the current page.</li>
+<li>Write the new tuple, link via <code>t_ctid</code>, and set <code>heap_update</code> flag.</li>
+</ol>
+<p>HOT updates dramatically cut index maintenance cost, especially for narrow tables with frequent updates.</p>
+<h3 id="vacuumheuristics">Vacuum Heuristics</h3>
+<p>Autovacuum launches based on two thresholds: <code>autovacuum_vacuum_threshold</code> + <code>autovacuum_vacuum_scale_factor * reltuples</code> for dead tuples, and a similar formula for analyze. For high‑TPS workloads, lowering the scale factor and increasing the worker count (<code>autovacuum_max_workers</code>) keeps version chains short.</p>
+<h2 id="performancescalinganalysis">Performance/Scaling Analysis</h2>
+<h3 id="hotspotmitigation">Hot Spot Mitigation</h3>
+<p>Contention on the <code>pg_class</code> and <code>pg_attribute</code> system catalogs can become a bottleneck. Partitioning large tables and distributing write hotspots across partitions reduces lock contention on catalog rows.</p>
+<h3 id="indexmaintenanceundermvcc">Index Maintenance Under MVCC</h3>
+<p>Every non‑HOT update forces an index entry rewrite. B‑tree indexes suffer from page splits and bloat. Using <code>BRIN</code> or <code>HASH</code> indexes for high‑cardinality, write‑heavy columns can alleviate bloat. Regular <code>REINDEX</code> or <code>pg_repack</code> mitigates fragmentation.</p>
+<h3 id="tuningcheckpointandautovacuum">Tuning Checkpoint and Autovacuum</h3>
+<p>For million‑TPS workloads, checkpoint intervals must be short enough to avoid long recovery times but long enough to prevent I/O storms. Recommended settings:</p>
+<pre><code>checkpoint_timeout = 5min
+max_wal_size = 64GB
+checkpoint_completion_target = 0.9
+</code></pre>
+<p>Autovacuum parameters:</p>
+<pre><code>autovacuum_naptime = 1s
+autovacuum_max_workers = 10
+max_pred_locks_per_transaction = 2000
+</code></pre>
+<p>These values keep dead‑tuple accumulation low and prevent predicate lock exhaustion during massive <code>SELECT … FOR UPDATE</code> bursts.</p>
+<h2 id="commonfailuremodevacuumstarvationandwraparoundbugs">Common Failure Mode: Vacuum Starvation and Wraparound Bugs</h2>
+<p>When autovacuum cannot keep up, dead tuples accumulate, leading to long scan times and, eventually, transaction ID wraparound. Symptoms include sudden latency spikes and, in worst cases, silent data loss when a wraparound aborts active transactions.</p>
+<h3 id="debuggingtechniques">Debugging Techniques</h3>
+<ol>
+<li>Monitor <code>pg_stat_activity</code> for long‑running transactions holding old snapshots.</li>
+<li>Query <code>pg_stat_user_tables</code> for <code>n_dead_tup</code> and <code>last_autovacuum</code> timestamps.</li>
+<li>Use <code>pg_walfile_name_offset</code> to verify WAL retention.</li>
+</ol>
+<h3 id="preventiveconfigurations">Preventive Configurations</h3>
+<pre><code>vacuum_defer_cleanup_age = 0
+vacuum_freeze_min_age = 50000000
+vacuum_freeze_table_age = 200000000
+log_autovacuum_min_duration = 0
+</code></pre>
+<p>Enabling detailed autovacuum logs surfaces problematic tables before they cause wraparound.</p>
+<h2 id="tradeoffsandpitfalls">Trade‑offs and Pitfalls</h2>
+<ul>
+<li><strong>Increased Autovacuum Frequency</strong>: Reduces version chain length but adds CPU and I/O overhead. Balance by profiling actual dead‑tuple generation rate.</li>
+<li><strong>Aggressive HOT Updates</strong>: While HOT reduces index churn, it can lead to page-level bloat if the page becomes fragmented. Periodic <code>VACUUM (FULL)</code> may be required.</li>
+<li><strong>Large <code>max_pred_locks_per_transaction</code></strong>: Prevents lock exhaustion but consumes shared memory. Monitor <code>shared_buffers</code> and <code>max_pred_locks_per_transaction</code> together.</li>
+</ul>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>MVCC provides lock‑free reads at the expense of version chain maintenance; proper vacuuming is non‑negotiable for high‑throughput OLTP.</li>
+<li>HOT updates, when applicable, dramatically cut index write amplification.</li>
+<li>Tuning checkpoint, autovacuum, and predicate lock parameters is essential to sustain million‑TPS workloads.</li>
+<li>Continuous monitoring of snapshot age, dead‑tuple counts, and wraparound risk prevents silent latency spikes and data loss.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
