@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Deep Dive into PostgreSQL MVCC: Architecture, Tuning, and Pitfalls for High‑Throughput OLTP</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-03-21
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    An in‑depth exploration of PostgreSQL's Multi‑Version Concurrency Control engine, covering its internal data structures, optimization patterns, scaling behavior under heavy transaction loads, and the subtle bugs that often surface in production.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">postgresql</span>
+    <span class="tag">mvcc</span>
+    <span class="tag">performance</span>
+    <span class="tag">internals</span>
+    <span class="tag">oltp</span>
+    <span class="tag">undefined</span>
+    <span class="tag">undefined</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <p>PostgreSQL relies on Multi‑Version Concurrency Control (MVCC) to provide snapshot isolation without blocking readers. Each transaction sees a consistent view of the database as of the moment it acquires its snapshot, while writers create new tuple versions that coexist with older ones. This design eliminates read‑write contention but introduces bookkeeping overhead that becomes visible under high‑throughput OLTP workloads.</p>
+<p>Understanding the internal data structures that support MVCC is essential for any performance‑critical deployment. The engine must balance three competing goals: minimal latency for individual transactions, efficient reclamation of dead tuples, and predictable storage growth. The sections below dissect the architecture, show how it interacts with the write‑ahead log (WAL) and vacuum processes, and present concrete tuning knobs for real‑world workloads.</p>
+<h2 id="mvccfundamentalsandtransactionvisibility">MVCC Fundamentals and Transaction Visibility</h2>
+<p>PostgreSQL assigns every transaction a monotonically increasing transaction identifier (XID). Each tuple header stores two XIDs: xmin (the creating transaction) and xmax (the deleting transaction, if any). A tuple is visible to a transaction T if:</p>
+<pre><code>xmin &lt;= T.xid &lt; xmax   (or xmax is undefined)
+</code></pre>
+<p>Snapshot generation captures the set of active XIDs at a point in time. The snapshot consists of a low watermark, a high watermark, and an array of in‑flight XIDs. During query execution, the visibility engine compares each tuple's xmin/xmax against this snapshot to decide inclusion.</p>
+<h2 id="storagelayoutandtupleheaderversioning">Storage Layout and Tuple Header Versioning</h2>
+<p>PostgreSQL stores table data in heap files, with each page holding a collection of tuples. The tuple header contains:</p>
+<pre><code>- xmin, xmax (4 bytes each)
+- t_infomask (2 bytes) indicating visibility flags
+- t_infomask2 (2 bytes) for additional state such as hint bits
+- t_hoff (1 byte) offset to user data
+</code></pre>
+<p>Large column values are off‑loaded to TOAST tables, which themselves obey MVCC rules. The visibility map (VM) tracks pages that contain only visible tuples, allowing vacuum to skip them. The free space map (FSM) records available space per page, guiding insert placement.</p>
+<h2 id="interactionwithwalcheckpointingandvacuum">Interaction with WAL, Checkpointing, and Vacuum</h2>
+<p>All tuple modifications are first recorded in the WAL before being applied to the heap. This guarantees durability but also means that each version creates additional WAL traffic. During checkpoint, dirty buffers are flushed, and a checkpoint record is written, establishing a recovery baseline.</p>
+<p>Vacuum performs three distinct tasks:</p>
+<pre><code>1. Remove dead tuples that are no longer visible to any active snapshot.
+2. Freeze old XIDs to prevent wraparound.
+3. Update VM and FSM entries.
+</code></pre>
+<p>Autovacuum runs in the background, driven by cost‑based thresholds. The cost delay and cost limit parameters control how aggressively vacuum consumes I/O and CPU. Mis‑tuned settings can cause either excessive bloat or latency spikes when vacuum finally runs.</p>
+<h2 id="performanceandscalinganalysis">Performance and Scaling Analysis</h2>
+<p>Benchmarking MVCC overhead typically involves a mix of short‑lived read‑only transactions and long‑running write‑heavy sessions. A representative pgbench script might look like:</p>
+<pre><code>BEGIN;
+UPDATE accounts SET balance = balance - 100 WHERE aid = 1;
+UPDATE accounts SET balance = balance + 100 WHERE aid = 2;
+COMMIT;
+</code></pre>
+<p>Key observations from such runs:</p>
+<ul>
+<li>Increasing <code>vacuum_cost_delay</code> from the default 20 ms to 50 ms reduces I/O contention but adds ~5 % latency to the critical path.</li>
+<li>Setting <code>autovacuum_vacuum_scale_factor</code> to 0.05 and <code>autovacuum_vacuum_threshold</code> to 50 triggers more frequent, smaller vacuums, keeping bloat under control for tables with high update rates.</li>
+<li>Indexes that are frequently updated (e.g., B‑tree on a hot column) benefit from <code>fillfactor</code> reduction (e.g., 70) to leave room for insert‑only tuple versions, mitigating page splits.</li>
+</ul>
+<h2 id="commonfailuremodesandpitfalls">Common Failure Modes and Pitfalls</h2>
+<h3 id="transactionidwraparound">Transaction ID Wraparound</h3>
+<p>PostgreSQL XIDs are 32‑bit, wrapping after ~2 billion transactions. If wraparound is approached without proper freezing, the system will refuse new writes. Regular vacuum with <code>freeze_min_age</code> and <code>freeze_table_age</code> settings prevents this scenario.</p>
+<h3 id="bloataccumulation">Bloat Accumulation</h3>
+<p>Heavy update/delete patterns generate dead tuples faster than vacuum can reclaim them, leading to table and index bloat. Symptoms include increased disk usage, slower sequential scans, and higher checkpoint duration. Periodic manual <code>VACUUM (FULL, ANALYZE)</code> can reclaim space but requires exclusive locks.</p>
+<h3 id="stalesnapshots">Stale Snapshots</h3>
+<p>Long‑running read‑only transactions keep old tuple versions alive, preventing vacuum from freeing them. This can cause sudden latency spikes when autovacuum finally catches up, as it must process a large backlog. Application‑level connection pooling should enforce reasonable transaction timeouts.</p>
+<h2 id="keytakeaways">Key Takeaways</h2>
+<ul>
+<li>MVCC provides non‑blocking reads at the cost of version churn; understanding tuple header semantics is crucial.</li>
+<li>The storage layout (heap, TOAST, VM, FSM) works together to minimize unnecessary vacuum work.</li>
+<li>Tuning autovacuum (cost delay, scale factor, thresholds) is the primary lever for high‑throughput OLTP.</li>
+<li>Guard against XID wraparound and bloat with proactive freezing and appropriate fillfactor settings.</li>
+<li>Monitor long‑running snapshots to avoid hidden latency penalties.</li>
+</ul>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
