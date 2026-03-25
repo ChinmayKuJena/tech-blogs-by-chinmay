@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #f6f8fa;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+.wrapper {
+  max-width: 760px;
+  margin: 40px auto;
+  background: #ffffff;
+  padding: 48px;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
+  line-height: 1.7;
+  color: #111827;
+}
+
+h1 {
+  font-size: 34px;
+  margin-bottom: 12px;
+  line-height: 1.3;
+}
+
+.meta {
+  font-size: 14px;
+  color: #6b7280;
+  margin-bottom: 20px;
+}
+
+.description {
+  font-size: 18px;
+  color: #374151;
+  margin-bottom: 28px;
+}
+
+.tags {
+  margin-bottom: 32px;
+}
+
+.tag {
+  display: inline-block;
+  background: #eef2ff;
+  color: #3730a3;
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 13px;
+  margin-right: 6px;
+  margin-bottom: 6px;
+}
+
+h2 {
+  margin-top: 36px;
+  font-size: 24px;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 6px;
+}
+
+h3 {
+  margin-top: 28px;
+  font-size: 18px;
+}
+
+p {
+  margin: 16px 0;
+}
+
+code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+pre {
+  background: #0f172a;
+  color: #f8fafc;
+  padding: 18px;
+  border-radius: 10px;
+  overflow-x: auto;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+  color: inherit;
+}
+
+blockquote {
+  border-left: 4px solid #2563eb;
+  padding-left: 16px;
+  color: #374151;
+  margin: 20px 0;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 24px 0;
+}
+
+th, td {
+  border: 1px solid #e5e7eb;
+  padding: 10px;
+  text-align: left;
+  font-size: 14px;
+}
+
+th {
+  background: #f9fafb;
+}
+
+hr {
+  margin: 48px 0;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+}
+
+.footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.footer strong {
+  color: #111827;
+}
+
+.footer a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  text-decoration: underline;
+}
+
+.signature {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+</style>
+</head>
+
+<body>
+
+<div class="wrapper">
+
+  <!-- Title -->
+  <h1>Avoiding Connection Pool Exhaustion in Serverless Backends</h1>
+
+  <!-- Meta -->
+  <div class="meta">
+    📅 2026-03-25
+  </div>
+
+  <!-- Description -->
+  <div class="description">
+    Why naive DB pooling breaks in serverless functions and how to keep connections healthy with lazy initialization and explicit cleanup.
+  </div>
+
+  <!-- Tags -->
+  <div class="tags">
+    <span class="tag">databases</span>
+    <span class="tag">serverless</span>
+    <span class="tag">typescript</span>
+    <span class="tag">performance</span>
+  </div>
+
+  <!-- Blog Content (HTML) -->
+  <h2 id="insight">Insight</h2>
+<p>Serverless platforms spin up a fresh container per request, but they also reuse containers for subsequent invocations. If you create a long‑lived <code>pg.Pool</code> at module load time, each container can retain dozens of idle connections. When many containers are warm, the total connections quickly exceed the database limit, causing throttling or crashes. The safe pattern is to lazily instantiate a pool per request and close it before the function exits, or use a short‑lived client for one‑off queries.</p>
+<h2 id="example">Example</h2>
+<pre><code class="ts language-ts">import { Client } from 'pg';
+
+export const handler = async (event: any) =&gt; {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  const res = await client.query('SELECT now()');
+  await client.end(); // ensures the socket is released
+  return { statusCode: 200, body: JSON.stringify(res.rows) };
+};
+</code></pre>
+<h2 id="takeaway">Takeaway</h2>
+<p>Never keep a global connection pool in a serverless function. Open a client, run your query, and close it explicitly to keep the total connection count predictable and within your DB limits.</p>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="signature">
+      <strong>Chinmay Ku Jena</strong><br>
+      Distributed Systems & Backend Engineering<br><br>
+      📱 <a href="https://wa.me/918926215167?text=Hi%20Chinmay%2C%20I%20read%20your%20blog%20and%20wanted%20to%20connect." target="_blank">
+        Message on WhatsApp
+      </a><br>
+      📧 <a href="mailto:chinmay09jena@gmail.com">
+        chinmay09jena@gmail.com
+      </a><br>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
